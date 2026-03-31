@@ -1,0 +1,940 @@
+local addonName, CBM = ...
+
+-------------------------------------------------
+-- STATE
+-------------------------------------------------
+
+local version = 1.00
+
+local iconBarMap = {} -- cooldownID -> bar frame
+local idIconMap = {}  -- cooldownID -> icon frame
+
+local fullRemap
+local queuedFunctions
+local queuedClickFunctions
+
+CBM.editModeActive = false
+--CBM.focusedBar = nil
+
+CBM.PendingMoveID = nil -- cooldownID we want to move
+local pendingMoveBar    -- bar frame we are moving from
+local pendingMoveIndex
+
+local selectedBars = {} -- set of bar.name -> bar for shift-multi-select
+CBM.selectedBars = selectedBars
+
+local DEFAULT_ICON_HEIGHT = 38
+
+-- Blizzard cooldown viewers as icon sources
+local defaultBars = {
+  UtilityCooldownViewer,
+  EssentialCooldownViewer,
+  BuffIconCooldownViewer,
+}
+
+-------------------------------------------------
+-- SAVED VARIABLES
+-------------------------------------------------
+
+CoolBarDB = CoolBarDB or {
+  version = version,
+  bars = {}, -- account-wide bar structures, no per-spec icon lists
+}
+
+-------------------------------------------------
+-- FRAME POOL
+-------------------------------------------------
+
+CBM.BarFramePool = CreateFramePool(
+  "Frame",       -- 1. frameType: the type of frame to create
+  UIParent,      -- 2. parent: the parent frame
+  nil,           -- 3. template: XML template name (optional)
+  nil,           -- 4. resetFunc: function called when frame is released (optional)
+  nil,           -- 5. frameNum: initial number of frames to create (optional)
+  function(self) -- 6. initFunc: function called when frame is acquired
+    CBM.InitBarFrame(self)
+  end
+)
+
+-------------------------------------------------
+-- CALLBACKS FOR BAR MODULE
+-------------------------------------------------
+
+CBM.callbacks = CBM.callbacks or {}
+
+function CBM.IsModifierKeyDown()
+  return IsShiftKeyDown() or IsControlKeyDown() or IsAltKeyDown()
+end
+
+function CBM.GetTableSize(t)
+  if not t then return 0 end
+  local count = 0
+  for _ in pairs(t) do
+    count = count + 1
+  end
+  return count
+end
+
+function CBM.GetOffsets(_, _, _, xOfs, yOfs)
+  return xOfs, yOfs
+end
+
+local function round(number, decimals)
+  if type(number) ~= "number" then
+    return 0
+  end
+  decimals = decimals or 0
+  return tonumber(string.format("%." .. decimals .. "f", number))
+end
+
+function CBM.minimalRound(number, maxDecimals)
+  if type(number) ~= "number" then
+    return 0
+  end
+  if maxDecimals <= 0 then return round(number) end
+  local r = tostring(round(number, maxDecimals))
+  for i = #r, 1, -1 do
+    local char = strsub(r, i, i)
+    if char ~= "0" then
+      r = strsub(r, 1, i)
+      break
+    elseif char == "." then
+      r = strsub(r, 1, i - 1)
+      break
+    end
+  end
+  return tonumber(r)
+end
+
+function CBM.trimRound(number, compare)
+  if type(number) ~= "number" then
+    return compare or 0
+  end
+  local r = (type(compare) == "number") and compare or round(number)
+  if abs(r - number) < .001 then
+    return r
+  else
+    return number
+  end
+end
+
+function CBM.GetRoundingPrecision(step)
+  if not step then return 0 end
+  local i = 0
+  while step < 1 do
+    step = step * 10
+    i = i + 1
+  end
+  return i
+end
+
+function CBM.GetFrameFromName(name)
+  local globalFrame = _G[name]
+  if globalFrame and globalFrame.GetName then
+    return globalFrame
+  end
+  if CBM.BarFramePool.GetFrameByName then
+    return CBM.BarFramePool:GetFrameByName(name)
+  end
+  return nil
+end
+
+function CBM.GetFocusedBar()
+  for _, selected in pairs(selectedBars) do
+    if selected then
+      return selected
+    end
+  end
+end
+
+function CBM.SetFocus(bar, useShift)
+  -- Multi-select toggle when Shift is held and a bar is clicked
+  if useShift and bar then
+    if selectedBars[bar.settings.name] then
+      selectedBars[bar.settings.name] = nil
+    else
+      selectedBars[bar.settings.name] = bar
+    end
+  else
+    wipe(selectedBars)
+    if bar then
+      selectedBars[bar.settings.name] = bar
+    end
+  end
+
+  for customBar in CBM.BarFramePool:EnumerateActive() do
+    customBar:UpdateFocused()
+  end
+
+  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
+    CBM.OptionsFrame:UpdateOptions()
+  end
+end
+
+function CBM.UpdateBar(bar)
+  bar = bar or CBM.GetFocusedBar()
+  if not bar then return end
+
+  local s = bar.settings
+
+  -- Check if anchor settings have changed
+  local currentAnchor, currentTarget, currentTargetPoint = bar:GetPoint()
+  local anchorChanged = (currentAnchor ~= s.anchorPoint)
+      or (currentTarget and currentTarget:GetName() ~= s.anchorTarget)
+      or (currentTargetPoint ~= s.targetPoint)
+
+  -- Save old position if anchor changed
+  local oldLeft, oldBottom
+  if anchorChanged then
+    oldLeft = bar:GetLeft()
+    oldBottom = bar:GetBottom()
+  end
+
+  -- Apply bar point (without rounding if anchor changed, with rounding otherwise)
+  bar:SetBarPoint(anchorChanged and nil or CBM.trimRound)
+
+  -- Recalculate and apply offsets if anchor changed
+  if oldLeft then
+    s.offsetX = s.offsetX + (oldLeft - bar:GetLeft())
+    s.offsetY = s.offsetY + (oldBottom - bar:GetBottom())
+    bar:SetBarPoint(CBM.trimRound)
+
+    if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
+      CBM.OptionsFrame:UpdateOptions()
+    end
+  end
+
+  bar:SetAnchorLine()
+end
+
+CBM.callbacks.SetFocus                  = CBM.SetFocus
+CBM.callbacks.UpdateBar                 = CBM.UpdateBar
+CBM.callbacks.UpdateOptions             = function()
+  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
+    CBM.OptionsFrame:UpdateOptions()
+  end
+end
+CBM.callbacks.GetOffsets                = CBM.GetOffsets
+CBM.callbacks.GetFrameFromName          = CBM.GetFrameFromName
+CBM.callbacks.GetTableSize              = CBM.GetTableSize
+CBM.callbacks.IsModifierKeyDown         = CBM.IsModifierKeyDown
+
+-------------------------------------------------
+-- BAR POOL HELPERS
+-------------------------------------------------
+
+CBM.BarFramePool.GetFirstAvailableIndex = function(self)
+  local digits = {}
+  local max = -1
+
+  for b in self:EnumerateActive() do
+    local name = b.name or ""
+    -- Extract trailing number from the bar name (e.g. "customBar12" -> "12")
+    local n = name:match("(%d+)$")
+    n = n and tonumber(n) or nil
+
+    if n then
+      if n > max then max = n end
+      digits[n] = true
+    end
+  end
+
+  local i = 0
+  while i <= max do
+    if not digits[i] then
+      return i
+    end
+    i = i + 1
+  end
+
+  return max + 1
+end
+
+CBM.BarFramePool.GetFrameByName         = function(self, name)
+  for b in self:EnumerateActive() do
+    if b.name == name then return b end
+  end
+  return nil
+end
+
+-------------------------------------------------
+-- EDIT MODE / ICON CLICKING
+-------------------------------------------------
+
+local function CAN_ACCESS_VALUE(value)
+  return true
+end
+
+if not FindBaseSpellByID then
+  FindBaseSpellByID = C_SpellBook.FindBaseSpellByID
+end
+
+function CBM.ToggleEditMode()
+  if InCombatLockdown() then return end
+  CBM.editModeActive = not CBM.editModeActive
+  CooldownViewerSettings:SetShown(CBM.editModeActive)
+  for bar in CBM.BarFramePool:EnumerateActive() do
+    if not CBM.editModeActive then
+      bar:Hide()
+    else
+      bar:Show()
+    end
+  end
+
+  if not CBM.editModeActive then
+    if CBM.OptionsFrame then CBM.OptionsFrame:Hide() end
+  else
+    if CBM.OptionsFrame then CBM.OptionsFrame:Show() end
+  end
+
+  if CAN_ACCESS_VALUE(defaultBars[1].IsShown) then
+    -- Secure wrapper: only trigger if untainted
+    local ok, err = pcall(EventRegistry.TriggerEvent, EventRegistry, "CooldownViewerSettings.OnShow",
+      CooldownViewerSettings)
+    if not ok then CBM.fallBackUpdateShownState() end -- Fallback if tainted
+  else
+    CBM.fallBackUpdateShownState()
+  end
+
+  CBM.ToggleDefaultIconClicks()
+end
+
+function CBM.SetIconShownOverrides(defaultBar)
+  if not defaultBar.showHook then
+    defaultBar.showHook = true
+    hooksecurefunc(defaultBar, "UpdateShownState", function(self)
+      if CBM.editModeActive and (not InCombatLockdown()) then
+        local ok, err = pcall(self.SetShown, self, true)
+        if not ok then return end -- Silently skip tainted frames
+      end
+    end)
+  end
+
+  if defaultBar == BuffIconCooldownViewer then
+    for icon in defaultBar.itemFramePool:EnumerateActive() do
+      if not icon.showHook then
+        icon.showHook = true
+        hooksecurefunc(icon, "UpdateShownState", function(self)
+          if self.cooldownID and CBM.editModeActive then self:SetShown(true) end
+        end)
+      end
+    end
+  end
+end
+
+function CBM.EnableDefaultBarClicks(defaultBar)
+  if EditModeManagerFrame:IsShown() then return end
+
+  for icon in defaultBar.itemFramePool:EnumerateActive() do
+    if not InCombatLockdown() then
+      icon:SetPropagateMouseClicks(true)
+    end
+    icon:SetScript("OnMouseDown", function(self, button)
+      if button ~= "LeftButton" then return end
+      if IsControlKeyDown() then
+        CBM.AddOrRemoveIcon(self, button)
+      elseif IsAltKeyDown() then
+        CBM.MoveIconToOtherBar(self, button)
+      end
+    end)
+  end
+
+  CBM.SetIconShownOverrides(defaultBar)
+  CBM.ToggleDefaultIconClicks(defaultBar)
+
+  local icon = defaultBar.itemFramePool:GetNextActive()
+  defaultBar.iconWidth = icon and icon:GetWidth() or DEFAULT_ICON_HEIGHT
+end
+
+function CBM.ToggleDefaultIconClicks(defaultBar)
+  local scopeDefaultBars = defaultBars
+  if defaultBar then scopeDefaultBars = { defaultBar } end
+
+  for _, bar in pairs(scopeDefaultBars) do
+    for icon in bar.itemFramePool:EnumerateActive() do
+      icon:SetMouseClickEnabled(CBM.editModeActive)
+      icon:SetMouseMotionEnabled(bar.tooltipsShown)
+    end
+  end
+end
+
+-------------------------------------------------
+-- ICON MAPPING / LAYOUT
+-------------------------------------------------
+local DEFAULT_SCALE = {
+  ["ESSENTIAL"] = nil,
+  ["UTILITY"] = nil,
+  ["BUFF"] = nil,
+}
+
+function CBM.UpdateIDIconMap()
+  if fullRemap then return end
+
+  for _, defaultBar in pairs(defaultBars) do
+    for icon in defaultBar.itemFramePool:EnumerateActive() do
+      if icon.cooldownID then
+        idIconMap[icon.cooldownID] = icon
+
+        if defaultBar == UtilityCooldownViewer then
+          if not DEFAULT_SCALE["UTILITY"] then
+            DEFAULT_SCALE["UTILITY"] = icon:GetScale()
+          end
+          icon._CBM_Source = "UTILITY"
+        elseif defaultBar == EssentialCooldownViewer then
+          if not DEFAULT_SCALE["ESSENTIAL"] then
+            DEFAULT_SCALE["ESSENTIAL"] = icon:GetScale()
+          end
+          icon._CBM_Source = "ESSENTIAL"
+        elseif defaultBar == BuffIconCooldownViewer then
+          if not DEFAULT_SCALE["BUFF"] then
+            DEFAULT_SCALE["BUFF"] = icon:GetScale()
+          end
+          icon._CBM_Source = "BUFF"
+        end
+      end
+    end
+  end
+end
+
+function CBM.ResetDefaultLayouts()
+  CBM.UpdateIDIconMap()
+  for _, defaultBar in pairs(defaultBars) do
+    defaultBar:Layout()
+  end
+end
+
+function CBM.fallBackUpdateShownState()
+  for _, defaultBar in pairs(defaultBars) do
+    if CBM.editModeActive then defaultBar:SetShown(true) end
+    for icon in defaultBar.itemFramePool:EnumerateActive() do
+      if CBM.editModeActive then icon:SetShown(true) end
+    end
+  end
+end
+
+function CBM.ExecuteLayout()
+  for customBar in CBM.BarFramePool:EnumerateActive() do
+    customBar:ResetLayout()
+    if customBar.settings.icons then
+      for _, id in pairs(customBar.settings.icons) do
+        local icon = idIconMap[id]
+        if icon and id == icon.cooldownID then
+          customBar:AddIcon(icon)
+          iconBarMap[id] = customBar
+        else
+          idIconMap[id] = nil
+        end
+      end
+    end
+  end
+
+  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
+    CBM.OptionsFrame:UpdateOptions()
+  end
+end
+
+function CBM.AddOrRemoveIcon(icon, button)
+  if button ~= "LeftButton"
+      or not CBM.editModeActive
+      or not IsControlKeyDown()
+  then
+    return
+  end
+
+  local count = CBM.GetTableSize(selectedBars)
+  if (count == 1) then
+    if not icon.cooldownID then
+      print("Icon data not initialized.")
+      return
+    end
+
+    local id = icon.cooldownID
+    local bar = iconBarMap[id]
+    if bar then
+      -- removing
+      local icon = idIconMap[id]
+      if icon then
+        local scale = DEFAULT_SCALE[icon._CBM_Source]
+        if scale then
+          icon:SetScale(scale)
+        end
+        icon:SetAlpha(1)
+      end
+      iconBarMap[id] = nil
+      for i, iconID in ipairs(bar.settings.icons) do
+        if iconID == id then
+          table.remove(bar.settings.icons, i)
+          break
+        end
+      end
+      CBM.ResetDefaultLayouts()
+    else
+      bar = CBM.GetFocusedBar()
+      if bar then
+        bar.settings.icons = bar.settings.icons or {}
+        tinsert(bar.settings.icons, id)
+        CBM.ExecuteLayout()
+      end
+    end
+  elseif count > 1 then
+    for bar in CBM.BarFramePool:EnumerateActive() do
+      if selectedBars[bar.settings.name] then
+        for i, icon in ipairs(bar.settings.icons) do
+          if icon then
+            local ic = iconBarMap[icon]
+            local scale = DEFAULT_SCALE[ic._CBM_Source]
+            if scale then
+              icon:SetScale(scale)
+            end
+            icon:SetAlpha(1)
+            iconBarMap[icon] = nil
+            table.remove(bar.settings.icons, i)
+          end
+        end
+      end
+    end
+    CBM.ResetDefaultLayouts()
+  else
+    return
+  end
+
+  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
+    CBM.OptionsFrame:UpdateOptions()
+  end
+end
+
+function CBM.MoveIconToOtherBar(icon, button)
+  if button ~= "LeftButton" or not CBM.editModeActive or not IsAltKeyDown() then
+    return
+  end
+
+  local count = CBM.GetTableSize(selectedBars)
+  if count ~= 1 then
+    return
+  end
+
+  -- STEP 1: arm swap/move (must have a real icon)
+  if not CBM.PendingMoveID then
+    if not icon or not icon.cooldownID then
+      print("Icon data not initialized.")
+      return
+    end
+
+    local id  = icon.cooldownID
+    local src = iconBarMap[id]
+
+    if not src or not src.settings or not src.settings.icons then
+      print("This icon is not on any custom bar yet.")
+      return
+    end
+
+    local srcIndex
+    for i, iconID in ipairs(src.settings.icons) do
+      if iconID == id then
+        srcIndex = i
+        break
+      end
+    end
+
+    if not srcIndex then
+      print("Could not resolve source slot for icon.")
+      return
+    end
+
+    CBM.PendingMoveID = id
+    pendingMoveBar    = src
+    pendingMoveIndex  = srcIndex
+    return
+  end
+
+  -- STEP 2: perform swap/move
+  local moveID      = CBM.PendingMoveID
+  local moveSrc     = pendingMoveBar
+  local moveIdx     = pendingMoveIndex
+
+  CBM.PendingMoveID = nil
+  pendingMoveBar    = nil
+  pendingMoveIndex  = nil
+
+  if not moveID or not moveSrc or not moveSrc.settings or not moveSrc.settings.icons then
+    print("No valid source for swap.")
+    return
+  end
+
+  -- Destination resolution:
+  --  a) If we have an icon on the second click, try to use its bar/slot.
+  --  b) If icon is nil (e.g. empty button), use the focused bar, and treat as "no specific slot" (append).
+  local dst, dstIndex, id, src
+  if icon and icon.cooldownID then
+    id  = icon.cooldownID
+    src = iconBarMap[id]
+
+    if src and src.settings and src.settings.icons then
+      for i, iconID in ipairs(src.settings.icons) do
+        if iconID == id then
+          dstIndex = i
+          break
+        end
+      end
+    end
+
+    dst = src
+  else
+    dst      = CBM.GetFocusedBar and CBM.GetFocusedBar() or CBM.focusedBar
+    dstIndex = nil
+  end
+
+  if not dst then
+    print("No valid destination bar.")
+    return
+  end
+
+  -- Cancel if second click is effectively the same slot/bar as the source
+  if icon and id == moveID and src == moveSrc then
+    print("Swap cancelled.")
+    return
+  end
+
+  -- Case 1: swap with an existing icon in that slot
+  if dstIndex and dst.settings and dst.settings.icons and dst.settings.icons[dstIndex] then
+    local otherID = dst.settings.icons[dstIndex]
+    if otherID and otherID ~= moveID then
+      local otherBar                                                       = dst
+      local otherIndex                                                     = dstIndex
+
+      otherBar.settings.icons[otherIndex], moveSrc.settings.icons[moveIdx] =
+          moveSrc.settings.icons[moveIdx], otherBar.settings.icons[otherIndex]
+
+      CBM.ExecuteLayout()
+      if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
+        CBM.OptionsFrame:UpdateOptions()
+      end
+      return
+    end
+  end
+
+  -- Case 2: move into an empty slot or append
+  table.remove(moveSrc.settings.icons, moveIdx)
+
+  dst.settings.icons = dst.settings.icons or {}
+  if dstIndex and not dst.settings.icons[dstIndex] then
+    dst.settings.icons[dstIndex] = moveID
+  else
+    table.insert(dst.settings.icons, moveID)
+  end
+
+  CBM.ExecuteLayout()
+  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
+    CBM.OptionsFrame:UpdateOptions()
+  end
+end
+
+-------------------------------------------------
+-- BAR CREATION / SETUP
+-------------------------------------------------
+---
+CBM.multiDragLeader = nil
+CBM.multiDragDeltaX = 0
+CBM.multiDragDeltaY = 0
+
+local function CreateBarSettings(name)
+  return {
+    name         = name,
+    icons        = {}, -- cooldownIDs, not saved per-spec
+    scale        = 1,
+    padding      = 0,
+    isHorizontal = true,
+    anchorPoint  = "CENTER",
+    anchorTarget = "UIParent",
+    targetPoint  = "CENTER",
+    offsetX      = 0,
+    offsetY      = 0,
+    absoluteX    = 0,
+    absoluteY    = 0,
+  }
+end
+
+function CBM.CreateNewBar(name, settings)
+  name = name or ("customBar" .. CBM.BarFramePool:GetFirstAvailableIndex())
+
+  local bar = CBM.BarFramePool:Acquire()
+
+  if settings then
+    bar.settings = settings
+    bar.settings.name = name
+  else
+    bar.settings = CreateBarSettings(name)
+    tinsert(CoolBarDB.bars, bar.settings)
+  end
+
+  bar.name = name
+  bar.displayedIcons = {}
+
+  bar:SetWidth(DEFAULT_ICON_HEIGHT)
+  bar:SetHeight(DEFAULT_ICON_HEIGHT)
+
+  if not settings then
+    bar:SetBarPoint(true)
+  end
+
+  C_Timer.After(0, function()
+    bar:SetAnchorLine()
+  end)
+
+  CBM.SetFocus(bar, false)
+
+  if CBM.editModeActive then bar:Show() end
+  return bar
+end
+
+function CBM.NewBar()
+  CBM.CreateNewBar()
+  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
+    CBM.OptionsFrame:UpdateOptions()
+  end
+end
+
+function CBM.DeleteFocusedBar()
+  local count = CBM.GetTableSize(selectedBars)
+  if count < 1 then
+    return
+  end
+  for bar in CBM.BarFramePool:EnumerateActive() do
+    if selectedBars[bar.settings.name] then
+      CBM.BarFramePool:Release(bar)
+
+      for i, barSettings in ipairs(CoolBarDB.bars) do
+        if barSettings.name == bar.settings.name then
+          if barSettings.icons then
+            for _, iconID in pairs(barSettings.icons) do
+              local icon = idIconMap[iconID]
+              if icon then
+                icon:SetScale(1)
+              end
+              iconBarMap[iconID] = nil
+            end
+          end
+          table.remove(CoolBarDB.bars, i)
+          break
+        end
+      end
+    else
+      local s = bar.settings
+      for name in pairs(selectedBars) do
+        if s.anchorTarget == name then
+          s.anchorPoint  = "CENTER"
+          s.anchorTarget = "UIParent"
+          s.targetPoint  = "CENTER"
+          CBM.UpdateBar(bar)
+        end
+      end
+    end
+  end
+
+  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
+    CBM.OptionsFrame:UpdateOptions()
+  end
+
+  -- Focus the next available bar, or clear focus if none exist
+  wipe(selectedBars)
+  local nextBar = nil
+  for bar in CBM.BarFramePool:EnumerateActive() do
+    nextBar = bar
+    break
+  end
+  if nextBar then
+    CBM.SetFocus(nextBar, false)
+    -- else
+    --   wipe(selectedBars)
+  end
+  CBM.ResetDefaultLayouts()
+end
+
+-------------------------------------------------
+-- CLASS/SPEC RELOAD HOOKS
+-------------------------------------------------
+
+local function SetupBars()
+  CBM.BarFramePool:ReleaseAll()
+  for _, barData in ipairs(CoolBarDB.bars) do
+    CBM.CreateNewBar(barData.name, barData)
+  end
+
+  for bar in CBM.BarFramePool:EnumerateActive() do
+    bar:SetBarPoint()
+  end
+end
+
+local function ResetBars()
+  if not CBM.OptionsFrame then return end
+
+  local restore = CBM.editModeActive
+  if CBM.editModeActive then CBM.ToggleEditMode() end
+
+  CBM.SetFocus(nil, false)
+  SetupBars()
+  fullRemap = true
+
+  if restore then CBM.ToggleEditMode() end
+
+  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
+    CBM.OptionsFrame:UpdateOptions()
+  end
+end
+
+-------------------------------------------------
+-- QUEUED UPDATES
+-------------------------------------------------
+
+queuedFunctions = {
+  UpdateIDIconMap = false,
+  ExecuteLayout   = false,
+}
+
+queuedClickFunctions = {
+  [UtilityCooldownViewer]   = false,
+  [EssentialCooldownViewer] = false,
+  [BuffIconCooldownViewer]  = false,
+}
+
+function CBM.QueueUpdate(fnName)
+  queuedFunctions[fnName] = true
+  CBM.UpdateFrame:Show()
+end
+
+function CBM.QueueClickFunction(defaultBar)
+  queuedClickFunctions[defaultBar] = true
+  CBM.UpdateFrame:Show()
+end
+
+CBM.UpdateFrame = CreateFrame("Frame")
+CBM.UpdateFrame:Hide()
+CBM.UpdateFrame:SetScript("OnUpdate", function(self, elapsed)
+  CBM.UpdateFrame:Hide()
+
+  for bar, update in pairs(queuedClickFunctions) do
+    if update then CBM.EnableDefaultBarClicks(bar) end
+    queuedClickFunctions[bar] = false
+  end
+
+  if queuedFunctions.UpdateIDIconMap then
+    CBM.UpdateIDIconMap()
+    queuedFunctions.UpdateIDIconMap = false
+  end
+
+  if queuedFunctions.ExecuteLayout then
+    CBM.ExecuteLayout()
+    queuedFunctions.ExecuteLayout = false
+  end
+end)
+
+-------------------------------------------------
+-- EVENTS / SLASH
+-------------------------------------------------
+
+CBM.EventFrame = CreateFrame("Frame")
+CBM.EventFrame:RegisterEvent("ADDON_LOADED")
+CBM.EventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+CBM.EventFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
+CBM.EventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
+CBM.EventFrame:RegisterEvent("ADDON_RESTRICTION_STATE_CHANGED")
+
+CBM.EventFrame:SetScript("OnEvent", function(self, event, ...)
+  if self[event] then self[event](self, event, ...) end
+end)
+
+function CBM.EventFrame:ADDON_RESTRICTION_STATE_CHANGE()
+  if InCombatLockdown() then
+    if CBM.editModeActive then
+      CBM.ToggleEditMode()
+    end
+  end
+end
+
+function CBM.EventFrame:ADDON_LOADED(_, addon)
+  if addon ~= addonName then return end
+
+  CoolBarDB.version = version
+
+  SLASH_CoolBar1 = "/cbm"
+  SlashCmdList.CoolBar = function(msg)
+    msg = string.lower(msg or "")
+    local arg = msg:match("^(%S+)")
+    if not arg or arg == "" then
+      CBM.ToggleEditMode()
+    elseif arg == "new" then
+      CBM.NewBar()
+    elseif arg == "delete" then
+      CBM.DeleteFocusedBar()
+    elseif arg == "reset" then
+      local bar = CBM.BarFramePool and CBM.BarFramePool:GetFrameByName("customBar0")
+      if bar and bar.settings then
+        bar.settings.offsetX = 0
+        bar.settings.offsetY = 0
+        if CBM.UpdateBar then
+          CBM.UpdateBar(bar)
+        end
+      end
+    else
+      print("Cooldown Bar Manager commands")
+      print("  /cbm - Toggle config mode.")
+      print("  /cbm new - Create a new bar.")
+      print("  /cbm delete - Delete the focused bar.")
+      print("  /cbm reset - Reset customBar0 to 0,0.")
+    end
+  end
+end
+
+function CBM.EventFrame:PLAYER_ENTERING_WORLD()
+  SetupBars()
+
+  if CBM.SetupOptionsUI then
+    CBM.SetupOptionsUI()
+  end
+
+  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
+    CBM.OptionsFrame:UpdateOptions()
+  end
+
+  CBM.UpdateIDIconMap()
+
+  local CVS = _G["CooldownViewerSettings"]
+  if CVS then
+    hooksecurefunc(CVS, "Show", function()
+      CBM.ToggleEditMode()
+    end)
+
+    hooksecurefunc(CVS, "Hide", function()
+      CBM.ToggleEditMode()
+    end)
+  end
+
+  for _, defaultBar in pairs(defaultBars) do
+    hooksecurefunc(defaultBar, "Layout", function(self)
+      if fullRemap then fullRemap = false end
+      CBM.QueueUpdate("UpdateIDIconMap")
+      CBM.QueueUpdate("ExecuteLayout")
+      CBM.QueueClickFunction(defaultBar)
+    end)
+
+    hooksecurefunc(defaultBar, "Show", function()
+      CBM.QueueUpdate("ExecuteLayout")
+    end)
+
+    hooksecurefunc(defaultBar, "Hide", function()
+      CBM.QueueUpdate("ExecuteLayout")
+    end)
+
+    CBM.SetIconShownOverrides(defaultBar)
+    CBM.EnableDefaultBarClicks(defaultBar)
+  end
+end
+
+function CBM.EventFrame:ACTIVE_PLAYER_SPECIALIZATION_CHANGED()
+  C_Timer.After(.01, ResetBars)
+end
+
+function CBM.EventFrame:TRAIT_CONFIG_UPDATED(_, configID)
+  if configID ~= C_ClassTalents.GetActiveConfigID() then return end
+  C_Timer.After(.01, ResetBars)
+end

@@ -1,0 +1,11 @@
+## Interface: 120000, 120001
+## Title: CoolBarFrame
+## Notes: Emulate infinite Cooldown Manager bars, mixing both buff and cooldown icons.
+## Author: deez nuts
+## SavedVariables: CoolBarDB
+## Version: 0.1
+## Category: Matcha Latte
+
+Core.lua
+CoolBarOptions.lua
+CoolBarFrame.lua
