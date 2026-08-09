@@ -1,0 +1,15 @@
+# Editor / IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Packaging output
+.release/
+*.zip
+
+# Logs
+*.log

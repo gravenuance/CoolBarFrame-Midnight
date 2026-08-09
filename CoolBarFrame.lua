@@ -398,7 +398,9 @@ function CBM.InitBarFrame(bar)
     chargeScale = (self.settings.scale or 1) * chargeScale
 
     icon:SetScale(appliedScale)
-    icon.ChargeCount:SetScale(chargeScale)
+    if icon.ChargeCount then
+      icon.ChargeCount:SetScale(chargeScale)
+    end
     icon:ClearAllPoints()
     icon:SetPoint(anchorPoint, anchorTarget, targetPoint, padding, 0)
     tinsert(self.displayedIcons, icon)

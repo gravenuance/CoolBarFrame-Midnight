@@ -329,14 +329,17 @@ function CBM.EnableDefaultBarClicks(defaultBar)
     if not InCombatLockdown() then
       icon:SetPropagateMouseClicks(true)
     end
-    icon:SetScript("OnMouseDown", function(self, button)
-      if button ~= "LeftButton" then return end
-      if IsControlKeyDown() then
-        CBM.AddOrRemoveIcon(self, button)
-      elseif IsAltKeyDown() then
-        CBM.MoveIconToOtherBar(self, button)
-      end
-    end)
+    if not icon.clickHooked then
+      icon.clickHooked = true
+      icon:SetScript("OnMouseDown", function(self, button)
+        if button ~= "LeftButton" then return end
+        if IsControlKeyDown() then
+          CBM.AddOrRemoveIcon(self, button)
+        elseif IsAltKeyDown() then
+          CBM.MoveIconToOtherBar(self, button)
+        end
+      end)
+    end
   end
 
   CBM.SetIconShownOverrides(defaultBar)
@@ -416,7 +419,7 @@ function CBM.ExecuteLayout()
   for customBar in CBM.BarFramePool:EnumerateActive() do
     customBar:ResetLayout()
     if customBar.settings.icons then
-      for _, id in pairs(customBar.settings.icons) do
+      for _, id in ipairs(customBar.settings.icons) do
         local icon = idIconMap[id]
         if icon and id == icon.cooldownID then
           customBar:AddIcon(icon)
@@ -479,18 +482,18 @@ function CBM.AddOrRemoveIcon(icon, button)
   elseif count > 1 then
     for bar in CBM.BarFramePool:EnumerateActive() do
       if selectedBars[bar.settings.name] then
-        for i, icon in ipairs(bar.settings.icons) do
-          if icon then
-            local ic = iconBarMap[icon]
+        for _, id in ipairs(bar.settings.icons) do
+          local ic = idIconMap[id]
+          if ic then
             local scale = DEFAULT_SCALE[ic._CBM_Source]
             if scale then
-              icon:SetScale(scale)
+              ic:SetScale(scale)
             end
-            icon:SetAlpha(1)
-            iconBarMap[icon] = nil
-            table.remove(bar.settings.icons, i)
+            ic:SetAlpha(1)
           end
+          iconBarMap[id] = nil
         end
+        wipe(bar.settings.icons)
       end
     end
     CBM.ResetDefaultLayouts()
@@ -709,7 +712,9 @@ function CBM.DeleteFocusedBar()
             for _, iconID in pairs(barSettings.icons) do
               local icon = idIconMap[iconID]
               if icon then
-                icon:SetScale(1)
+                local scale = DEFAULT_SCALE[icon._CBM_Source]
+                icon:SetScale(scale or 1)
+                icon:SetAlpha(1)
               end
               iconBarMap[iconID] = nil
             end
@@ -843,7 +848,7 @@ CBM.EventFrame:SetScript("OnEvent", function(self, event, ...)
   if self[event] then self[event](self, event, ...) end
 end)
 
-function CBM.EventFrame:ADDON_RESTRICTION_STATE_CHANGE()
+function CBM.EventFrame:ADDON_RESTRICTION_STATE_CHANGED()
   if InCombatLockdown() then
     if CBM.editModeActive then
       CBM.ToggleEditMode()
