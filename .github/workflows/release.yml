@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v*.*" # matches this project's X.Y (0.3) and X.Y.Z versioning alike
 
 permissions:
   contents: write
