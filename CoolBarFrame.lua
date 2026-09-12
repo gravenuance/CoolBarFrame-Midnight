@@ -340,15 +340,6 @@ function CBM.InitBarFrame(bar)
 
   local DEFAULT_ICON_HEIGHT = 38 -- still used only for empty bar
 
-  local function PrintFuncs(obj, prefix)
-    prefix = prefix or ""
-    for k, v in pairs(obj) do
-      if type(v) == "function" then
-        print(prefix .. tostring(k))
-      end
-    end
-  end
-
   function bar:AddIcon(icon)
     local isFirst = #self.displayedIcons == 0
     local isHorizontal = self.settings.isHorizontal
@@ -373,36 +364,24 @@ function CBM.InitBarFrame(bar)
       sourceScale = 1
       chargeScale = 1
     end
-    icon:SetAlpha(0.8)
-    --PrintFuncs(icon:GetIconTexture())
-    --[[ local interval = 0.3
-    local lastUpdate = 0
-    if not icon.Cool_Hooked then
-      icon.Cool_Hooked = true
-      hooksecurefunc(icon, "OnUpdate", function(self, elapsed)
-        lastUpdate = lastUpdate + elapsed
-        if lastUpdate >= interval then
-          --local desaturated = self.cooldownDesaturated --and not self:IsExpired();
-          --self:SetShown(not desaturated)
-          --self.cooldownEnabled = false
-          local cd = self:GetCooldownFrame()
-          if cd then
-            cd:SetShown(not self.cooldownIsActive)
-            --cd:SetShown(false)
-          end
-        end
-      end)
-    end ]]
 
     local appliedScale = (self.settings.scale or 1) * sourceScale
-    chargeScale = (self.settings.scale or 1) * chargeScale
+    local targetChargeScale = (self.settings.scale or 1) * chargeScale
 
-    icon:SetScale(appliedScale)
-    if icon.ChargeCount then
-      icon.ChargeCount:SetScale(chargeScale)
-    end
-    icon:ClearAllPoints()
-    icon:SetPoint(anchorPoint, anchorTarget, targetPoint, padding, 0)
+    -- Blizzard's cooldown-viewer icons can turn into forbidden frames (12.1 aura API hardening);
+    -- skip this icon rather than erroring out of the whole layout pass if that happens.
+    local ok = pcall(function()
+      icon:SetAlpha(0.8)
+      icon:SetScale(appliedScale)
+      if icon.ChargeCount then
+        -- ChargeCount is a child of icon, so its effective size is chargeScale * appliedScale; divide out the parent's scale so it lands on targetChargeScale.
+        icon.ChargeCount:SetScale(targetChargeScale / appliedScale)
+      end
+      icon:ClearAllPoints()
+      icon:SetPoint(anchorPoint, anchorTarget, targetPoint, padding, 0)
+    end)
+    if not ok then return end
+
     tinsert(self.displayedIcons, icon)
 
     -- Use scaled width/height for bar size.
@@ -431,8 +410,8 @@ function CBM.InitBarFrame(bar)
     if not anchorTarget then
       self.settings.anchorPoint, anchorTarget, self.settings.targetPoint, self.settings.offsetX, self.settings.offsetY =
           "CENTER", UIParent, "CENTER",
-          self.settings.absoluteX - (GetScreenWidth() + bar:GetWidth()) / 2,
-          self.settings.absoluteY - (GetScreenHeight() + bar:GetHeight()) / 2
+          self.settings.absoluteX - (GetScreenWidth() - bar:GetWidth()) / 2,
+          self.settings.absoluteY - (GetScreenHeight() - bar:GetHeight()) / 2
 
       self.settings.anchorTarget = "UIParent"
       bar:SetBarPoint(trimRound)

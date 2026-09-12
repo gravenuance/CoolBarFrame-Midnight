@@ -7,7 +7,7 @@ can mix and match any cooldown or buff icon onto any number of bars, position
 each bar independently (or anchor bars to one another), and tweak scale,
 padding, and orientation per bar.
 
-Supports retail WoW 12.0.5, 12.0.7, and 12.1.
+Supports retail WoW 12.0.5, 12.0.7, 12.1, and 12.1.5 (PTR).
 
 ## Usage
 

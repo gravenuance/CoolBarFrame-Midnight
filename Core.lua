@@ -4,7 +4,40 @@ local addonName, CBM = ...
 -- STATE
 -------------------------------------------------
 
-local version = 1.00
+local SCHEMA_VERSION = 1.00
+
+-- Steps to bring CoolBarDB forward from an older schema, keyed by the version they upgrade FROM.
+-- Add an entry here whenever SCHEMA_VERSION is bumped; none exist yet since 1.00 is the first schema.
+local migrations = {}
+
+local function MigrateDB(db)
+  if type(db.bars) ~= "table" then
+    db.bars = {}
+  end
+
+  local dbVersion = db.version
+  if type(dbVersion) ~= "number" then
+    dbVersion = SCHEMA_VERSION -- unversioned/corrupt: assume current shape rather than replaying every migration
+  elseif dbVersion > SCHEMA_VERSION then
+    print("|cffffd200CoolBarFrame:|r your saved data is from a newer version of the addon; leaving it untouched.")
+    return -- never stamp/mutate data from a version we don't understand
+  end
+
+  while dbVersion < SCHEMA_VERSION do
+    local migrate = migrations[dbVersion]
+    if not migrate then break end
+
+    local ok, err = pcall(migrate, db)
+    if not ok then
+      print("|cffff0000CoolBarFrame:|r failed to migrate saved data from version " ..
+        dbVersion .. ": " .. tostring(err))
+      break
+    end
+    dbVersion = dbVersion + 1
+  end
+
+  db.version = SCHEMA_VERSION
+end
 
 local iconBarMap = {} -- cooldownID -> bar frame
 local idIconMap = {}  -- cooldownID -> icon frame
@@ -37,7 +70,7 @@ local defaultBars = {
 -------------------------------------------------
 
 CoolBarDB = CoolBarDB or {
-  version = version,
+  version = SCHEMA_VERSION,
   bars = {}, -- account-wide bar structures, no per-spec icon lists
 }
 
@@ -269,9 +302,9 @@ if not FindBaseSpellByID then
   FindBaseSpellByID = C_SpellBook.FindBaseSpellByID
 end
 
-function CBM.ToggleEditMode()
-  if InCombatLockdown() then return end
-  CBM.editModeActive = not CBM.editModeActive
+function CBM.ToggleEditMode(forceOff)
+  if InCombatLockdown() and not forceOff then return end
+  CBM.editModeActive = forceOff and false or not CBM.editModeActive
   CooldownViewerSettings:SetShown(CBM.editModeActive)
   for bar in CBM.BarFramePool:EnumerateActive() do
     if not CBM.editModeActive then
@@ -370,6 +403,16 @@ local DEFAULT_SCALE = {
   ["BUFF"] = nil,
 }
 
+-- Blizzard's cooldown-viewer icons can turn into forbidden frames (12.1 aura API hardening);
+-- pcall so a forbidden icon can't abort the rest of the removal/cleanup loop.
+local function RestoreIcon(icon)
+  if not icon then return end
+  pcall(function()
+    icon:SetScale(DEFAULT_SCALE[icon._CBM_Source] or 1)
+    icon:SetAlpha(1)
+  end)
+end
+
 function CBM.UpdateIDIconMap()
   if fullRemap then return end
 
@@ -455,14 +498,7 @@ function CBM.AddOrRemoveIcon(icon, button)
     local bar = iconBarMap[id]
     if bar then
       -- removing
-      local icon = idIconMap[id]
-      if icon then
-        local scale = DEFAULT_SCALE[icon._CBM_Source]
-        if scale then
-          icon:SetScale(scale)
-        end
-        icon:SetAlpha(1)
-      end
+      RestoreIcon(idIconMap[id])
       iconBarMap[id] = nil
       for i, iconID in ipairs(bar.settings.icons) do
         if iconID == id then
@@ -483,14 +519,7 @@ function CBM.AddOrRemoveIcon(icon, button)
     for bar in CBM.BarFramePool:EnumerateActive() do
       if selectedBars[bar.settings.name] then
         for _, id in ipairs(bar.settings.icons) do
-          local ic = idIconMap[id]
-          if ic then
-            local scale = DEFAULT_SCALE[ic._CBM_Source]
-            if scale then
-              ic:SetScale(scale)
-            end
-            ic:SetAlpha(1)
-          end
+          RestoreIcon(idIconMap[id])
           iconBarMap[id] = nil
         end
         wipe(bar.settings.icons)
@@ -710,12 +739,7 @@ function CBM.DeleteFocusedBar()
         if barSettings.name == bar.settings.name then
           if barSettings.icons then
             for _, iconID in pairs(barSettings.icons) do
-              local icon = idIconMap[iconID]
-              if icon then
-                local scale = DEFAULT_SCALE[icon._CBM_Source]
-                icon:SetScale(scale or 1)
-                icon:SetAlpha(1)
-              end
+              RestoreIcon(idIconMap[iconID])
               iconBarMap[iconID] = nil
             end
           end
@@ -762,6 +786,7 @@ end
 local function SetupBars()
   CBM.BarFramePool:ReleaseAll()
   for _, barData in ipairs(CoolBarDB.bars) do
+    barData.icons = barData.icons or {} -- guard against bar entries saved by an older/partial schema
     CBM.CreateNewBar(barData.name, barData)
   end
 
@@ -849,17 +874,15 @@ CBM.EventFrame:SetScript("OnEvent", function(self, event, ...)
 end)
 
 function CBM.EventFrame:ADDON_RESTRICTION_STATE_CHANGED()
-  if InCombatLockdown() then
-    if CBM.editModeActive then
-      CBM.ToggleEditMode()
-    end
+  if InCombatLockdown() and CBM.editModeActive then
+    CBM.ToggleEditMode(true)
   end
 end
 
 function CBM.EventFrame:ADDON_LOADED(_, addon)
   if addon ~= addonName then return end
 
-  CoolBarDB.version = version
+  MigrateDB(CoolBarDB)
 
   SLASH_CoolBar1 = "/cbm"
   SlashCmdList.CoolBar = function(msg)
