@@ -270,16 +270,17 @@ end
 local function ApplyEditMode(active)
   CBM.editModeActive = active
 
-  for bar in CBM.BarFramePool:EnumerateActive() do
-    bar:SetShown(active)
-  end
-  CBM.OptionsFrame:SetShown(active)
-
   -- Blizzard's window goes through the UI panel manager; calling its methods or events from here would taint its code.
+  -- It opens first so the options frame can sit beside it.
   local settings = CooldownViewerSettings
   if settings and settings:IsShown() ~= active then
     if active then ShowUIPanel(settings) else HideUIPanel(settings) end
   end
+
+  for bar in CBM.BarFramePool:EnumerateActive() do
+    bar:SetShown(active)
+  end
+  CBM.OptionsFrame:SetShown(active)
 
   CBM.ToggleDefaultIconClicks()
 end

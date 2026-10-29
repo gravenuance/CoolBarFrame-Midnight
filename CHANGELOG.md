@@ -5,6 +5,16 @@ All notable changes to CoolBarFrame are documented in this file.
 ## [Unreleased]
 
 ### Changed
+- The options frame is rebuilt from Blizzard's own templates (panel frame,
+  stepper sliders, input boxes, panel buttons) and opens beside the Cooldown
+  Manager window until you move it. It is titled "CoolBarFrame", groups
+  its controls under Layout, Position and Anchor, and uses the buttons
+  "New bar" and "Delete bar". The help window, the in-frame hint, the
+  update-notice box and the bottom Close button are gone; a shortcuts
+  tooltip on the info icon replaces the help window.
+- All option widgets are unnamed or named under `CoolBarFrameOptions`
+  instead of generic globals such as `ScaleHandle` or `OrientationSwapper`,
+  and the frame itself is now `CoolBarFrameOptions` (was `CBMOptionsFrame`).
 - Saved data is now schema 2. Loading older data merges the full set of bar
   defaults into every saved bar without overwriting your values, detaches
   anchor loops, and keeps the pre-migration bars in `CoolBarDB.backup`. A
@@ -20,6 +30,12 @@ All notable changes to CoolBarFrame are documented in this file.
   (it is unused here and replacing a Blizzard global risks taint).
 
 ### Fixed
+- Refreshing the options frame (selecting a bar, a layout pass, a loading
+  screen) re-applied every shown value as if you had typed it, so selecting
+  two bars with Shift copied the first bar's scale and padding onto the
+  others. Refreshing now only redisplays; values are written only when you
+  change a control. Controls that do not apply to a multi-bar selection are
+  properly disabled (sliders, edit boxes and buttons), not just dimmed.
 - Dropping a bar after a drag could turn a round offset such as `10` or
   `-50` into `1` or `-5`: the rounding helper stripped trailing zeros from
   whole numbers.

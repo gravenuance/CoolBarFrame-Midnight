@@ -1,649 +1,486 @@
 local _, CBM = ...
 
-local WINDOW_WIDTH, WINDOW_HEIGHT = 300, 450
-local WINDOW_PADDING = 20
-local ZERO_BUTTON_WIDTH = 25
+local Logic = CBM.Logic
 
-local sliderTypes = {
-  absolute = 0,
-  floating = 1,
+-------------------------------------------------
+-- DESIGN TOKENS
+-------------------------------------------------
+
+-- Every size and colour of the options frame is defined here; widgets never use literals.
+local UI = {
+  FRAME_WIDTH    = 380,
+  FRAME_CHROME   = 28, -- Blizzard's title bar above the inset (24) plus its bottom edge (4)
+  INSET_SIDES    = 10, -- Blizzard's inset border, left (4) plus right (6)
+  PAD            = 12,
+  HEADER_HEIGHT  = 16,
+  ROW_HEIGHT     = 24,
+  ROW_GAP        = 6,
+  SECTION_GAP    = 14,
+  LABEL_WIDTH    = 92,
+  CONTROL_GAP    = 6,
+  EDIT_WIDTH     = 56,
+  EDIT_HEIGHT    = 22,
+  SQUARE_BUTTON  = 24,
+  BUTTON_WIDTH   = 120,
+  BUTTON_HEIGHT  = 24,
+  SWAP_WIDTH     = 140,
+  CELL           = 18,
+  CELL_GAP       = 4,
+  VIEWER_GAP     = 48, -- clears the Cooldown Manager window's side tabs
+  DEFAULT_X      = 300,
+  DEFAULT_Y      = -300,
+  DISABLED_ALPHA = 0.5,
+  HINT_SIZE      = 24,
+}
+UI.CONTENT_WIDTH = UI.FRAME_WIDTH - UI.INSET_SIDES - UI.PAD * 2
+UI.GRID_SIZE = UI.CELL * 3 + UI.CELL_GAP * 2
+
+local COLORS = {
+  cell       = { 0.12, 0.12, 0.12, 1 },
+  cellBorder = { 0.6, 0.6, 0.6, 1 },
+  cellHover  = { 1, 1, 1, 0.25 },
 }
 
-CBM.OptionsFrame = CreateFrame("Frame", "CBMOptionsFrame", UIParent)
-local Options = CBM.OptionsFrame
+local POINT_ORDER = { "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT" }
+local POINT_NAMES = {
+  TOPLEFT = "Top left", TOP = "Top", TOPRIGHT = "Top right",
+  LEFT = "Left", CENTER = "Center", RIGHT = "Right",
+  BOTTOMLEFT = "Bottom left", BOTTOM = "Bottom", BOTTOMRIGHT = "Bottom right",
+}
+
+-------------------------------------------------
+-- FRAME SHELL
+-------------------------------------------------
+
+local Options = CreateFrame("Frame", "CoolBarFrameOptions", UIParent, "ButtonFrameTemplate")
+CBM.OptionsFrame = Options
+Options.options = {}
+
+ButtonFrameTemplate_HidePortrait(Options)
+ButtonFrameTemplate_HideAttic(Options)
+ButtonFrameTemplate_HideButtonBar(Options)
+Options:SetTitle("CoolBarFrame")
 
 Options:SetToplevel(true)
 Options:SetFrameStrata("HIGH")
-Options.options = {}
+Options:SetClampedToScreen(true)
+Options:SetMovable(true)
+Options:EnableMouse(true)
+Options:RegisterForDrag("LeftButton")
+Options:SetSize(UI.FRAME_WIDTH, 100)
 Options:Hide()
+tinsert(UISpecialFrames, Options:GetName())
 
 hooksecurefunc(Options, "Hide", function()
   CBM.SetEditMode(false)
 end)
 
+Options:SetScript("OnDragStart", function(frame)
+  frame.userPlaced = true
+  frame:StartMoving()
+end)
+Options:SetScript("OnDragStop", function(frame)
+  frame:StopMovingOrSizing()
+end)
+
+-- Until the user drags it, the frame sits beside the Cooldown Manager window.
+local function PositionFrame()
+  if Options.userPlaced then return end
+  Options:ClearAllPoints()
+  if CooldownViewerSettings and CooldownViewerSettings:IsShown() then
+    Options:SetPoint("TOPLEFT", CooldownViewerSettings, "TOPRIGHT", UI.VIEWER_GAP, 0)
+  else
+    Options:SetPoint("TOPLEFT", UIParent, "TOPLEFT", UI.DEFAULT_X, UI.DEFAULT_Y)
+  end
+end
+
 -- Core skips refreshing a hidden options frame, so catch up when it opens.
-Options:SetScript("OnShow", function()
+Options:HookScript("OnShow", function()
+  PositionFrame()
   Options:UpdateOptions()
 end)
 
-local backdrop = Options:CreateTexture("ARTWORK")
-backdrop:SetAllPoints()
-backdrop:SetColorTexture(0, 0, 0, .8)
+local content = CreateFrame("Frame", nil, Options)
+content:SetPoint("TOPLEFT", Options.Inset, "TOPLEFT", UI.PAD, -UI.PAD)
+content:SetPoint("TOPRIGHT", Options.Inset, "TOPRIGHT", -UI.PAD, -UI.PAD)
 
-Options:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 300, -300)
-Options:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
-tinsert(UISpecialFrames, Options:GetName())
+local actions = CreateFrame("Frame", nil, Options)
+actions:SetHeight(UI.BUTTON_HEIGHT)
+actions:SetPoint("BOTTOMLEFT", Options.Inset, "BOTTOMLEFT", UI.PAD, UI.PAD)
+actions:SetPoint("BOTTOMRIGHT", Options.Inset, "BOTTOMRIGHT", -UI.PAD, UI.PAD)
 
-Options:EnableMouse(true)
-Options:SetMovable(true)
-Options:RegisterForDrag("LeftButton")
-Options:SetScript("OnMouseDown", function(self, btn)
-  if btn == "LeftButton" then self:StartMoving() end
-end)
-Options:SetScript("OnMouseUp", function(self, btn)
-  if btn == "LeftButton" then self:StopMovingOrSizing() end
-end)
+local barLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+barLabel:SetHeight(UI.HEADER_HEIGHT)
+barLabel:SetJustifyH("LEFT")
 
-local titleText = Options:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-titleText:SetPoint("TOP", Options, 0, -6)
-local fontPath, _, fontFlags = titleText:GetFont()
-titleText:SetFont(fontPath, 18, fontFlags)
-Options.titleText = titleText
+local status = Options:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+status:SetPoint("TOPLEFT", Options.Inset, "TOPLEFT", UI.PAD, -UI.PAD)
+status:SetText("Create or select a bar.")
 
-local closebutton = CreateFrame("Button", "$parentButtonClose", Options, "UIPanelButtonTemplate")
-closebutton:SetText("Close")
-closebutton:SetSize(80, 20)
-closebutton:SetPoint("BOTTOM", 0, 10)
-closebutton:SetScript("OnClick", function()
-  CBM.SetEditMode(false)
-end)
+-------------------------------------------------
+-- BAR ACCESS
+-------------------------------------------------
 
--- Help window
-local HELP_FRAME_WIDTH, HELP_FRAME_HEIGHT = 250, 230
-local HELP_FRAME_PADDING = 10
-
-local helpWindow = CreateFrame("Frame", "$parentHelpFrame", Options)
-helpWindow:SetPoint("TOPLEFT", Options, "TOPRIGHT", 10, 0)
-helpWindow:SetSize(HELP_FRAME_WIDTH, HELP_FRAME_HEIGHT)
-helpWindow:Hide()
-
-helpWindow.backdrop = helpWindow:CreateTexture("ARTWORK")
-helpWindow.backdrop:SetAllPoints()
-helpWindow.backdrop:SetColorTexture(0, 0, 0, .8)
-
-helpWindow.titleText = helpWindow:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-helpWindow.titleText:SetPoint("TOP", helpWindow, "TOP", 0, -6)
-helpWindow.titleText:SetText("Info")
-helpWindow.titleText:SetFont(fontPath, 18, fontFlags)
-
-helpWindow.textContent = helpWindow:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-helpWindow.textContent:SetPoint("TOPLEFT", helpWindow, "TOPLEFT", HELP_FRAME_PADDING, -30)
-helpWindow.textContent:SetSize(HELP_FRAME_WIDTH - HELP_FRAME_PADDING * 2, HELP_FRAME_HEIGHT - 30)
-helpWindow.textContent:SetFont(fontPath, 12, fontFlags)
-helpWindow.textContent:SetJustifyH("LEFT")
-helpWindow.textContent:SetJustifyV("TOP")
-helpWindow.textContent:SetWordWrap(true)
-helpWindow.textContent:SetText([[/cbm - Toggle config mode]])
-
-local helpButton = CreateFrame("Button", "$parentHelpButton", Options, "MainHelpPlateButton")
-helpButton:ClearAllPoints()
-helpButton:SetPoint("CENTER", Options, "TOPRIGHT", -8, -8)
-helpButton:SetScript("OnClick", function()
-  if helpWindow:IsVisible() then
-    helpWindow:Hide()
-  else
-    helpWindow:Show()
-  end
-end)
-
--- Update notification
-local updateNotification = CreateFrame("Frame", "$parentUpdateNotification", Options)
-Options.updateNotification = updateNotification
-updateNotification:SetPoint("BOTTOM", Options, "TOP", 0, 10)
-updateNotification:SetSize(WINDOW_WIDTH, 40)
-updateNotification.backdrop = updateNotification:CreateTexture("ARTWORK")
-updateNotification.backdrop:SetAllPoints()
-updateNotification.backdrop:SetColorTexture(0, 0, 0, .8)
-updateNotification:Hide()
-
-updateNotification.textContent = updateNotification:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-updateNotification.textContent:SetPoint("TOPLEFT", updateNotification, "TOPLEFT", HELP_FRAME_PADDING, -
-  HELP_FRAME_PADDING)
-updateNotification.textContent:SetFont(fontPath, 12, fontFlags)
-updateNotification.textContent:SetJustifyH("LEFT")
-updateNotification.textContent:SetJustifyV("TOP")
-updateNotification.textContent:SetWordWrap(true)
-
-function updateNotification:SetWindowSize(size)
-  self:SetHeight(size)
-  self.textContent:SetSize(HELP_FRAME_WIDTH - HELP_FRAME_PADDING * 2, size - HELP_FRAME_PADDING * 2)
+local function IsSelected(bar)
+  return CBM.selectedBars[bar.settings.name] ~= nil
 end
 
-updateNotification.closeButton = CreateFrame("Button", "$parentCloseButton", updateNotification,
-  "UIPanelCloseButtonNoScripts")
-updateNotification.closeButton:SetPoint("TOPRIGHT", updateNotification, "TOPRIGHT", -2, -2)
-updateNotification.closeButton:SetScript("OnClick", function()
-  updateNotification:Hide()
-end)
-
--- Hint text
-local hint = CreateFrame("Frame", "$parentHint", Options)
-Options.hint = hint
-hint:SetPoint("TOP", Options, "BOTTOM", 0, -10)
-hint:SetSize(WINDOW_WIDTH, 40)
-hint.backdrop = hint:CreateTexture("ARTWORK")
-hint.backdrop:SetAllPoints()
-hint.backdrop:SetColorTexture(0, 0, 0, .8)
-hint:Hide()
-
-hint.text = hint:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-hint.text:SetPoint("TOP", hint, "TOP", 0, -8)
-hint.text:SetSize(WINDOW_WIDTH - 16, 24)
-hint.text:SetJustifyH("LEFT")
-hint.text:SetJustifyV("TOP")
-hint.text:SetWordWrap(true)
-hint.text:SetText("Ctrl + Left Click an icon to add or remove it from this bar.")
-
--------------------------------------------------
--- ACTIVE BARS HELPERS
--------------------------------------------------
-
-local function GetActiveBarsForMulti()
-  local bars = {}
-
-  if CBM and CBM.selectedBars then
+-- Writes one option to the bar being edited, or to every selected bar for multi-bar options.
+local function ApplyOption(option, value, multi)
+  if multi then
     for bar in CBM.BarFramePool:EnumerateActive() do
-      if CBM.selectedBars[bar.settings.name] then
-        table.insert(bars, bar)
+      if IsSelected(bar) then
+        bar.settings[option] = value
+        CBM.UpdateBar(bar)
       end
     end
-    if CBM.GetTableSize(bars) >= 2 then
-      return bars
-    end
-  end
-
-  local focused = CBM.GetFocusedBar and CBM.GetFocusedBar()
-  if focused then
-    return { focused }
-  end
-
-  return nil
-end
-
-local function GetPrimaryBar()
-  local focused = CBM.GetFocusedBar()
-  if focused then
-    return focused
-  end
-
-  if CBM and CBM.selectedBars then
-    for bar in CBM.BarFramePool:EnumerateActive() do
-      if CBM.selectedBars[bar.settings.name] then
-        return bar
-      end
-    end
-  end
-
-  return nil
-end
-
--------------------------------------------------
--- SLIDERS
--------------------------------------------------
-
-local function SliderIsScale(self)
-  local n = self:GetName() or ""
-  return n:find("ScaleSliderContainer", 1, true)
-end
-
-local function SliderIsPadding(self)
-  local n = self:GetName() or ""
-  return n:find("PaddingSliderContainer", 1, true)
-end
-
-function Options:CreateSlider(name, type, min, max, step, zeroButton)
-  local slider = CreateFrame("Frame", name .. "SliderContainer", self)
-  slider:SetSize(WINDOW_WIDTH - WINDOW_PADDING * 2, 30)
-
-  slider.type = type
-  if type == sliderTypes.floating then
-    slider.float = min
   else
-    slider.minValue = min
-    slider.maxValue = max
+    local bar = CBM.GetFocusedBar()
+    if bar then
+      bar.settings[option] = value
+      CBM.UpdateBar(bar)
+    end
+  end
+  CBM.QueueUpdate("ExecuteLayout")
+end
+
+-- Gives a widget its bar-backed value; `default` is shown when no bar or no saved value exists.
+local function BindOption(widget, option, default, multi)
+  widget.option = option
+  widget.multi = multi
+
+  function widget:GetOptionValue()
+    local bar = CBM.GetFocusedBar()
+    local value = bar and bar.settings[option]
+    if value == nil then return default end
+    return value
   end
 
-  slider.sliderMode = true
+  function widget:SetOptionValue(value)
+    ApplyOption(option, value, multi)
+  end
+end
 
-  local sliderContainer = CreateFrame("Frame", "$parentSliderContainer", slider)
-  sliderContainer:SetPoint("BOTTOMLEFT", slider, 0, 2)
-  sliderContainer:SetSize(slider:GetWidth() - (zeroButton and (ZERO_BUTTON_WIDTH + WINDOW_PADDING / 2) or 0), 30)
+-------------------------------------------------
+-- SHARED CONTROLS
+-------------------------------------------------
 
-  local sliderTrack = CreateFrame("Frame", name .. "Slider", sliderContainer)
-  sliderTrack.tex = sliderTrack:CreateTexture("ARTWORK")
-  sliderTrack.tex:SetAllPoints()
-  sliderTrack.tex:SetColorTexture(.2, .2, .2, .5)
-  sliderTrack:SetSize(sliderContainer:GetWidth(), 10)
-  sliderTrack:SetPoint("BOTTOMLEFT", sliderContainer, 0, 2)
-
-  local handle = CreateFrame("Frame", name .. "Handle", sliderTrack)
-  handle.tex = handle:CreateTexture("ARTWORK")
-  handle.tex:SetAllPoints()
-  handle.tex:SetColorTexture(.5, .5, .5)
-  handle:SetSize(10, 18)
-  handle:SetPoint("CENTER", sliderTrack, "CENTER", 0, 0)
-  handle.precision = CBM.GetRoundingPrecision and CBM.GetRoundingPrecision(step) or 0
-
-  sliderContainer:SetScript("OnMouseDown", function(self, button)
-    if button == "LeftButton" and slider.sliderMode then
-      handle.isMoving = true
-    elseif button == "RightButton" and not handle.isMoving then
-      slider:ToggleSliderMode()
-    end
+local function AttachTooltip(frame, text)
+  frame:HookScript("OnEnter", function(owner)
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    GameTooltip_SetTitle(GameTooltip, text)
+    GameTooltip:Show()
   end)
-
-  sliderContainer:SetScript("OnMouseUp", function(self, button)
-    if button == "LeftButton" then
-      handle.isMoving = false
-      if slider.type == sliderTypes.floating then
-        slider:FloatingRecenter()
-      end
-    end
+  frame:HookScript("OnLeave", function()
+    GameTooltip:Hide()
   end)
+end
 
-  sliderContainer:SetScript("OnMouseWheel", function(self, direction)
-    slider:SetValue(slider:GetOptionValue() + (direction * (step or 1)), true)
-  end)
+local function CreateLabel(parent, text)
+  local label = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+  label:SetPoint("LEFT", parent, "LEFT", 0, 0)
+  label:SetWidth(UI.LABEL_WIDTH)
+  label:SetJustifyH("LEFT")
+  label:SetText(text)
+  return label
+end
 
-  sliderContainer:SetScript("OnUpdate", function(self)
-    if not handle.isMoving then return end
-
-    local left, width = sliderTrack:GetLeft(), sliderTrack:GetWidth()
-
-    -- Early exit if we don't have valid dimensions
-    if not left or width <= 0 then return end
-
-    local scale = sliderTrack:GetEffectiveScale()
-    local x = GetCursorPosition() / scale
-
-    -- Calculate position relative to track, clamped to bounds
-    local pos = x - left
-    if pos < 0 then pos = 0 end
-    if pos > width then pos = width end
-
-    handle:SetPoint("CENTER", sliderTrack, "LEFT", pos, 0)
-
-    -- Update value for absolute sliders
-    if slider.type == sliderTypes.absolute then
-      local newValue = slider.minValue + (pos / width) * (slider.maxValue - slider.minValue)
-      newValue = tonumber(string.format("%." .. handle.precision .. "f", newValue))
-
-      if newValue ~= slider:GetOptionValue() then
-        slider:SetValue(newValue, false)
-      end
-    elseif slider.type == sliderTypes.floating then
-      local newValue = slider.minValue + (pos / width) * (slider.maxValue - slider.minValue)
-      newValue = tonumber(string.format("%." .. handle.precision .. "f", newValue))
-
-      if newValue ~= slider:GetOptionValue() then
-        slider:SetValue(newValue, false)
-      end
-    end
-  end)
-
-  sliderContainer.titleText = sliderContainer:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-  sliderContainer.titleText:SetPoint("TOPLEFT", sliderContainer, "TOPLEFT", 0, 0)
-  sliderContainer.titleText:SetText(name)
-
-  sliderContainer.valueText = sliderContainer:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-  sliderContainer.valueText:SetPoint("BOTTOMRIGHT", sliderTrack, "TOPRIGHT", 0, 6)
-  sliderContainer.valueText:SetText("0")
-
-  local editBox = CreateFrame("EditBox", name .. "EditBox", slider, "InputBoxTemplate")
-  slider.editBox = editBox
-  editBox:SetSize(60, 30)
-  editBox:ClearAllPoints()
-  editBox:SetPoint("BOTTOM", slider, "BOTTOM", 2, 0)
-  editBox:SetText("0")
+local function CreateEditBox(parent, width)
+  local editBox = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+  editBox:SetSize(width, UI.EDIT_HEIGHT)
   editBox:SetAutoFocus(false)
-  editBox:SetPropagateMouseClicks(true)
+  editBox:SetMaxLetters(32)
+  return editBox
+end
 
-  local function CommitText(self)
-    local number = CBM.Logic.ParseNumber(self:GetText())
+local function SetRowEnabled(row, enabled)
+  row.label:SetFontObject(enabled and "GameFontNormal" or "GameFontDisable")
+  for _, control in ipairs(row.controls) do
+    control:SetEnabled(enabled)
+    control:SetAlpha(enabled and 1 or UI.DISABLED_ALPHA)
+  end
+end
+
+-- Escape reverts the text; Enter or leaving the box commits it, but only if the user typed something,
+-- so tabbing through a box never writes its value to the bars.
+local function WireEditBox(editBox, commit, revert)
+  editBox:HookScript("OnTextChanged", function(box, userInput)
+    if userInput then box.edited = true end
+  end)
+  editBox:SetScript("OnEscapePressed", function(box)
+    box.cancelled = true
+    box:ClearFocus()
+  end)
+  editBox:SetScript("OnEnterPressed", function(box)
+    box:ClearFocus()
+  end)
+  editBox:HookScript("OnEditFocusLost", function(box)
+    local edited = box.edited
+    box.edited = false
+    if edited and not box.cancelled then
+      commit(box:GetText())
+    else
+      revert()
+    end
+    box.cancelled = false
+  end)
+end
+
+-------------------------------------------------
+-- SLIDER ROW
+-------------------------------------------------
+
+-- config: label, option, step, zero, multi, and either min/max (fixed range) or float (range follows the value).
+local function CreateSlider(parent, config)
+  local row = CreateFrame("Frame", nil, parent)
+  row:SetHeight(UI.ROW_HEIGHT)
+  row.config = config
+  row.label = CreateLabel(row, config.label)
+  row.precision = Logic.GetRoundingPrecision(config.step)
+  BindOption(row, config.option, 0, config.multi)
+
+  local zero
+  if config.zero then
+    zero = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    zero:SetSize(UI.SQUARE_BUTTON, UI.SQUARE_BUTTON)
+    zero:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+    zero:SetText("0")
+    AttachTooltip(zero, "Set to zero")
+    zero:SetScript("OnClick", function()
+      row:Commit(0, true)
+    end)
+  end
+
+  local editBox = CreateEditBox(row, UI.EDIT_WIDTH)
+  if zero then
+    editBox:SetPoint("RIGHT", zero, "LEFT", -UI.CONTROL_GAP, 0)
+  else
+    editBox:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+  end
+  row.editBox = editBox
+
+  local holder = CreateFrame("Frame", nil, row, "MinimalSliderWithSteppersTemplate")
+  holder:SetHeight(UI.ROW_HEIGHT)
+  holder:SetPoint("LEFT", row.label, "RIGHT", UI.CONTROL_GAP, 0)
+  holder:SetPoint("RIGHT", editBox, "LEFT", -UI.CONTROL_GAP, 0)
+  local slider = holder.Slider
+  row.holder = holder
+  row.slider = slider
+
+  slider:SetValueStep(config.step)
+  slider:SetObeyStepOnDrag(true)
+  if config.float then
+    slider:SetMinMaxValues(-config.float, config.float)
+  else
+    slider:SetMinMaxValues(config.min, config.max)
+  end
+  slider:EnableMouseWheel(true)
+
+  row.controls = zero and { holder, editBox, zero } or { holder, editBox }
+
+  slider:SetScript("OnValueChanged", function(_, value)
+    if row.refreshing then return end
+    local rounded = tonumber(string.format("%." .. row.precision .. "f", value))
+    row:Commit(rounded, false)
+  end)
+  slider:SetScript("OnMouseWheel", function(_, direction)
+    slider:SetValue(slider:GetValue() + direction * config.step)
+  end)
+  -- Re-centering a floating range while the thumb is held would move it under the cursor.
+  slider:HookScript("OnMouseDown", function()
+    row.dragging = true
+  end)
+  slider:HookScript("OnMouseUp", function()
+    row.dragging = false
+    row:Refresh()
+  end)
+
+  WireEditBox(editBox, function(text)
+    local number = Logic.ParseNumber(text)
     if number then
-      slider:SetValue(number, true)
+      row:Commit(number, true)
     else
-      self:SetText(slider:GetOptionValue())
+      row:Refresh()
     end
-  end
-
-  editBox:SetScript("OnEditFocusLost", CommitText)
-
-  editBox:SetScript("OnEnterPressed", function(self)
-    CommitText(self)
-    self:ClearFocus()
+  end, function()
+    row:Refresh()
   end)
 
-  editBox:Hide()
-
-  if zeroButton then
-    slider.zeroButton = CreateFrame("Button", "$parentZeroButton", slider, "UIPanelButtonTemplate")
-    slider.zeroButton:SetText("0")
-    slider.zeroButton:SetSize(ZERO_BUTTON_WIDTH, ZERO_BUTTON_WIDTH)
-    slider.zeroButton:SetPoint("RIGHT", slider, "RIGHT", 0, 0)
-    slider.zeroButton:SetPropagateMouseClicks(false)
-    slider.zeroButton:SetScript("OnClick", function()
-      slider:SetValue(0, true)
-    end)
+  -- The user acting: clamp, write to the bar(s) when it changes anything (or `force`), then redisplay what was stored.
+  function row:Commit(requested, force)
+    local value, apply = Logic.PlanSliderUpdate("input", self:GetOptionValue(), requested, config.min, config.max, force)
+    if apply then
+      self:SetOptionValue(value)
+    end
+    self:Refresh()
   end
 
-  function slider:GetOptionValue()
-    -- Single-bar read, like old CMI
-    local bar = GetPrimaryBar()
-    if not bar or not self.option then return 0 end
-    return bar.settings[self.option] or 0
-  end
-
-  function slider:SetOptionValue(value)
-    if not self.option then return end
-    if SliderIsScale(self) or SliderIsPadding(self) then
-      -- Multi-edit scale and padding
-      local bars = GetActiveBarsForMulti()
-      if not bars then return end
-      for _, bar in ipairs(bars) do
-        bar.settings[self.option] = value
-        if CBM.UpdateBar then
-          CBM.UpdateBar(bar)
-        end
-      end
-    else
-      -- Single-bar for everything else
-      local bar = GetPrimaryBar()
-      if not bar then return end
-      bar.settings[self.option] = value
-      if CBM.UpdateBar then
-        CBM.UpdateBar(bar)
-      end
+  -- Redisplays the stored value without writing anything back to the bars.
+  function row:Refresh()
+    local value = self:GetOptionValue()
+    self.refreshing = true
+    if config.float and not self.dragging then
+      slider:SetMinMaxValues(value - config.float, value + config.float)
+    end
+    slider:SetValue(value)
+    self.refreshing = false
+    if not editBox:HasFocus() then
+      editBox:SetText(Logic.MinimalRound(value, 3))
+      editBox:SetCursorPosition(0)
     end
   end
 
-  function slider:BindOption(option)
-    self.option = option
+  function row:SetControlsEnabled(enabled)
+    SetRowEnabled(self, enabled)
   end
 
-  function slider:SetValue(value, setHandle)
-    if not value then return end
-    value = tonumber(value)
-
-    if self.type == sliderTypes.absolute then
-      if value < self.minValue then value = self.minValue end
-      if value > self.maxValue then value = self.maxValue end
-    end
-
-    if value == self:GetOptionValue() and not setHandle then
-      return
-    end
-    self:SetOptionValue(value)
-    sliderContainer.valueText:SetText(value)
-    slider.editBox:SetText(value)
-
-    if setHandle and self.type == sliderTypes.absolute then
-      local width = sliderTrack:GetWidth()
-      local pos = (value - self.minValue) / (self.maxValue - self.minValue) * width
-      handle:SetPoint("CENTER", sliderTrack, "LEFT", pos, 0)
-    elseif setHandle and self.type == sliderTypes.floating and not handle.isMoving then
-      self:FloatingRecenter(value)
-    end
-  end
-
-  function slider:FloatingRecenter(value)
-    value = value or self:GetOptionValue()
-    self.minValue = value - self.float
-    self.maxValue = value + self.float
-
-    local width = sliderTrack:GetWidth()
-    local pos = (value - self.minValue) / (self.maxValue - self.minValue) * width
-    handle:SetPoint("CENTER", sliderTrack, "LEFT", pos, 0)
-  end
-
-  function slider:ToggleSliderMode()
-    if self.sliderMode then
-      sliderTrack:Hide()
-      sliderContainer.valueText:Hide()
-      sliderContainer:SetPropagateMouseClicks(true)
-      editBox:Show()
-      editBox:SetFocus()
-    else
-      editBox:Hide()
-      sliderContainer.valueText:Show()
-      sliderContainer:SetPropagateMouseClicks(false)
-      sliderTrack:Show()
-    end
-    self.sliderMode = not self.sliderMode
-  end
-
-  slider:Show()
-  return slider
+  return row
 end
 
 -------------------------------------------------
--- TEXTBOX / ANCHOR SELECT / SWAPPER / BUTTON
+-- ANCHOR TARGET
 -------------------------------------------------
 
-function Options:CreateTextBox(name)
-  local textBox = CreateFrame("Frame", name .. "TextBoxContainer", Options)
-  textBox:SetSize(WINDOW_WIDTH - WINDOW_PADDING * 2, 40)
+local function CreateTargetBox(parent, label, option)
+  local row = CreateFrame("Frame", nil, parent)
+  row:SetHeight(UI.ROW_HEIGHT)
+  row.label = CreateLabel(row, label)
+  BindOption(row, option, "", false)
 
-  local editBox = CreateFrame("EditBox", name .. "EditBox", textBox, "InputBoxTemplate")
-  textBox.editBox = editBox
-  editBox:SetSize(150, 40)
-  editBox:ClearAllPoints()
-  editBox:SetPoint("BOTTOM", textBox, "BOTTOM", 0, -10)
-  editBox:SetAutoFocus(false)
-  editBox:SetCursorPosition(0)
+  local editBox = CreateEditBox(row, UI.EDIT_WIDTH)
+  editBox:SetPoint("LEFT", row.label, "RIGHT", UI.CONTROL_GAP, 0)
+  editBox:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+  row.editBox = editBox
+  row.controls = { editBox }
+  AttachTooltip(editBox, "Name of a bar or frame")
 
-  textBox.titleText = textBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-  textBox.titleText:SetPoint("TOPLEFT", textBox, "TOPLEFT", 0, 0)
-  textBox.titleText:SetText(name)
-
-  editBox:SetScript("OnEditFocusLost", function(self)
-    self:SetValueFromInput()
+  WireEditBox(editBox, function(text)
+    row:Commit(text)
+  end, function()
+    row:Refresh()
   end)
 
-  editBox:SetScript("OnEnterPressed", function(self)
-    self:SetValueFromInput()
+  function row:Commit(text)
+    text = text:match("^%s*(.-)%s*$")
+    local bar = CBM.GetFocusedBar()
+    if text ~= "" and text ~= self:GetOptionValue() and bar then
+      if not CBM.GetFrameFromName(text) then
+        CBM.Print("No frame named " .. text .. ".")
+      elseif not CBM.RejectAnchorLoop(bar.settings.name, text) then
+        self:SetOptionValue(text)
+      end
+    end
+    self:Refresh()
+  end
+
+  function row:Refresh()
+    if not editBox:HasFocus() then
+      editBox:SetText(self:GetOptionValue())
+      editBox:SetCursorPosition(0)
+    end
+  end
+
+  function row:SetControlsEnabled(enabled)
+    SetRowEnabled(self, enabled)
+  end
+
+  return row
+end
+
+-------------------------------------------------
+-- ANCHOR POINT GRID
+-------------------------------------------------
+
+local function CreatePointGrid(parent, label, option)
+  local grid = CreateFrame("Frame", nil, parent)
+  grid:SetSize(UI.GRID_SIZE, UI.HEADER_HEIGHT + UI.ROW_GAP + UI.GRID_SIZE)
+  BindOption(grid, option, "CENTER", false)
+
+  grid.label = grid:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+  grid.label:SetPoint("TOPLEFT", grid, "TOPLEFT", 0, 0)
+  grid.label:SetText(label)
+
+  grid.cells = {}
+  grid.controls = {}
+  local selected = { NORMAL_FONT_COLOR:GetRGB() }
+
+  for index, point in ipairs(POINT_ORDER) do
+    local cell = CreateFrame("Button", nil, grid)
+    cell:SetSize(UI.CELL, UI.CELL)
+    local column, rowIndex = (index - 1) % 3, math.floor((index - 1) / 3)
+    cell:SetPoint("TOPLEFT", grid, "TOPLEFT", column * (UI.CELL + UI.CELL_GAP),
+      -(UI.HEADER_HEIGHT + UI.ROW_GAP + rowIndex * (UI.CELL + UI.CELL_GAP)))
+
+    local border = cell:CreateTexture(nil, "BACKGROUND")
+    border:SetPoint("TOPLEFT", cell, "TOPLEFT", -1, 1)
+    border:SetPoint("BOTTOMRIGHT", cell, "BOTTOMRIGHT", 1, -1)
+    border:SetColorTexture(unpack(COLORS.cellBorder))
+    cell.fill = cell:CreateTexture(nil, "ARTWORK")
+    cell.fill:SetAllPoints()
+    cell.fill:SetColorTexture(unpack(COLORS.cell))
+    local hover = cell:CreateTexture(nil, "HIGHLIGHT")
+    hover:SetAllPoints()
+    hover:SetColorTexture(unpack(COLORS.cellHover))
+
+    AttachTooltip(cell, POINT_NAMES[point])
+    cell:SetScript("OnClick", function()
+      grid:SetOptionValue(point)
+      grid:Refresh()
+    end)
+
+    grid.cells[point] = cell
+    grid.controls[#grid.controls + 1] = cell
+  end
+
+  function grid:Refresh()
+    local current = self:GetOptionValue()
+    for point, cell in pairs(self.cells) do
+      if point == current then
+        cell.fill:SetColorTexture(unpack(selected))
+      else
+        cell.fill:SetColorTexture(unpack(COLORS.cell))
+      end
+    end
+  end
+
+  function grid:SetControlsEnabled(enabled)
+    SetRowEnabled(self, enabled)
+  end
+
+  return grid
+end
+
+-------------------------------------------------
+-- ORIENTATION
+-------------------------------------------------
+
+local function CreateSwapper(parent, label, option, trueText, falseText)
+  local row = CreateFrame("Frame", nil, parent)
+  row:SetHeight(UI.ROW_HEIGHT)
+  row.label = CreateLabel(row, label)
+  BindOption(row, option, true, false)
+
+  local button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+  button:SetSize(UI.SWAP_WIDTH, UI.BUTTON_HEIGHT)
+  button:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+  AttachTooltip(button, "Swap orientation")
+  row.button = button
+  row.controls = { button }
+
+  button:SetScript("OnClick", function()
+    row:SetOptionValue(not row:GetOptionValue())
+    row:Refresh()
   end)
 
-  function editBox:SetValueFromInput()
-    local val = self:GetText()
-    textBox:SetValue(val)
-    local bar = GetPrimaryBar()
-    if bar and CBM.UpdateBar then
-      CBM.UpdateBar(bar)
-    end
+  function row:Refresh()
+    button:SetText(self:GetOptionValue() and trueText or falseText)
   end
 
-  function textBox:GetOptionValue()
-    local bar = GetPrimaryBar()
-    if not bar or not self.option then return "" end
-    return bar.settings[self.option] or ""
+  function row:SetControlsEnabled(enabled)
+    SetRowEnabled(self, enabled)
   end
 
-  function textBox:SetOptionValue(value)
-    local bar = GetPrimaryBar()
-    if not bar or not self.option then return end
-    bar.settings[self.option] = value
-  end
-
-  function textBox:BindOption(option)
-    self.option = option
-  end
-
-  function textBox:SetValue(newAnchor)
-    if not newAnchor or newAnchor == "" then return end
-
-    if CBM.GetFrameFromName and not CBM.GetFrameFromName(newAnchor) then
-      self.editBox:SetText(self:GetOptionValue())
-      return
-    end
-
-    local bar = GetPrimaryBar()
-    if bar and CBM.RejectAnchorLoop(bar.settings.name, newAnchor) then
-      self.editBox:SetText(self:GetOptionValue())
-      return
-    end
-
-    self.editBox:SetText(newAnchor)
-    self.editBox:SetCursorPosition(0)
-    self:SetOptionValue(newAnchor)
-  end
-
-  textBox:Show()
-  return textBox
-end
-
-function Options:CreateButton(name, callback)
-  local button = CreateFrame("Button", name .. "Button", Options, "UIPanelButtonTemplate")
-  button:SetText(name)
-  button:SetSize(120, 26)
-  button:SetScript("OnClick", callback)
-  return button
-end
-
-function Options:CreateAnchorSelect(name)
-  local width = (WINDOW_WIDTH - 180) / 2
-  local points = { "TOPLEFT", "TOP", "TOPRIGHT", "RIGHT", "BOTTOMRIGHT", "BOTTOM", "BOTTOMLEFT", "LEFT", "CENTER" }
-
-  local selector = CreateFrame("Frame", name .. "Selector", Options)
-  selector:SetSize(width, 60)
-
-  selector.titleText = selector:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-  selector.titleText:SetPoint("TOP", selector, "TOP", 0, 0)
-  selector.titleText:SetText(name)
-
-  selector.pointContainer = CreateFrame("Frame", name .. "PointContainer", selector)
-  selector.pointContainer:SetSize(width, width)
-  selector.pointContainer:SetPoint("BOTTOM", selector, "BOTTOM", 0, -20)
-
-  selector.points = {}
-
-  for _, point in pairs(points) do
-    local a = CreateFrame("Frame", name .. "Selector" .. point, selector)
-    selector.points[point] = a
-    a.value = point
-    a.selected = false
-
-    a.tex = a:CreateTexture("ARTWORK")
-    a.tex:SetAllPoints()
-    a.tex:SetColorTexture(.5, .5, .5)
-    a:SetSize(14, 14)
-    a:SetPoint(point, selector.pointContainer, point, 0, 0)
-    a:EnableMouse(true)
-
-    a:SetScript("OnEnter", function()
-      if a.selected then return end
-      a.tex:SetColorTexture(.3, .3, .3)
-    end)
-
-    a:SetScript("OnLeave", function()
-      if a.selected then return end
-      a.tex:SetColorTexture(.5, .5, .5)
-    end)
-
-    a:SetScript("OnMouseDown", function(self, button)
-      if a.selected or button ~= "LeftButton" then return end
-      selector:SetValue(a.value)
-      local bar = GetPrimaryBar()
-      if bar and CBM.UpdateBar then
-        CBM.UpdateBar(bar)
-      end
-    end)
-  end
-
-  function selector:GetOptionValue()
-    local bar = GetPrimaryBar()
-    if not bar or not self.option then return "CENTER" end
-    return bar.settings[self.option] or "CENTER"
-  end
-
-  function selector:SetOptionValue(value)
-    local bar = GetPrimaryBar()
-    if not bar or not self.option then return end
-    bar.settings[self.option] = value
-  end
-
-  function selector:BindOption(option)
-    self.option = option
-  end
-
-  function selector:SetValue(value)
-    for p, a in pairs(self.points) do
-      if a.selected then
-        a.selected = false
-        a.tex:SetColorTexture(.5, .5, .5)
-      end
-      if p == value then
-        a.selected = true
-        a.tex:SetColorTexture(0, .5, .5)
-      end
-    end
-    self:SetOptionValue(value)
-  end
-
-  selector:Show()
-  return selector
-end
-
-function Options:CreateSwapper(label, trueText, falseText)
-  local width, height = WINDOW_WIDTH - WINDOW_PADDING * 2, 30
-  local padding = 5
-
-  local swapper = CreateFrame("Frame", label .. "Swapper", Options)
-  swapper:SetSize(width, height)
-
-  swapper.labelText = swapper:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-  swapper.labelText:SetPoint("LEFT", swapper, "LEFT", 0, 0)
-  swapper.labelText:SetSize(width / 2 - padding, height)
-  swapper.labelText:SetJustifyH("RIGHT")
-  swapper.labelText:SetText(label .. ":")
-
-  swapper.button = CreateFrame("Button", "$parentButton", swapper, "UIPanelButtonTemplate")
-  swapper.button:SetSize(width / 2 - padding, height - padding)
-  swapper.button:SetPoint("RIGHT", swapper, "RIGHT", 0, 0)
-  swapper.button:SetPropagateMouseClicks(false)
-
-  function swapper:GetOptionValue()
-    local bar = GetPrimaryBar()
-    if not bar or not self.option then return true end
-    if bar.settings[self.option] == nil then return true end
-    return bar.settings[self.option]
-  end
-
-  function swapper:SetOptionValue(value)
-    local bar = GetPrimaryBar()
-    if not bar or not self.option then return end
-    bar.settings[self.option] = value
-  end
-
-  function swapper:BindOption(option)
-    self.option = option
-  end
-
-  function swapper:SetValue(value)
-    self:SetOptionValue(value)
-    swapper.button:SetText(value and trueText or falseText)
-  end
-
-  swapper.button:SetScript("OnClick", function()
-    swapper:SetValue(not swapper:GetOptionValue())
-    local bar = GetPrimaryBar()
-    if bar and CBM.UpdateBar then
-      CBM.UpdateBar(bar)
-    end
-  end)
-
-  swapper:Show()
-  return swapper
+  return row
 end
 
 -------------------------------------------------
@@ -651,111 +488,116 @@ end
 -------------------------------------------------
 
 function Options:UpdateOptions()
-  local bars  = GetActiveBarsForMulti()
-  local count = CBM.GetTableSize and CBM.GetTableSize(bars) or (bars and #bars or 0)
-  local multi = bars and count > 1
+  local selectedCount = CBM.GetTableSize(CBM.selectedBars)
+  local focused = CBM.GetFocusedBar()
 
-  if not bars then
-    for _, option in pairs(Options.options) do option:Hide() end
-    Options.titleText:SetText("Create or select a bar.")
-    Options.hint:Hide()
-    return
-  end
+  content:SetShown(focused ~= nil)
+  status:SetShown(focused == nil)
+  if not focused then return end
 
-  local focusedBar = bars and bars[1]
+  local multi = selectedCount > 1
+  barLabel:SetText(multi and (selectedCount .. " bars selected") or focused:GetName())
 
-  if focusedBar and focusedBar.displayedIcons and #focusedBar.displayedIcons > 0 then
-    Options.hint:Show()
-  else
-    Options.hint:Hide()
-  end
-
-  for _, option in pairs(Options.options) do
-    option:Show()
-
-    local name      = option:GetName() or ""
-    local isScale   = name:find("ScaleSliderContainer", 1, true)
-    local isPadding = name:find("PaddingSliderContainer", 1, true)
-
-    if multi and not (isScale or isPadding) then
-      option:EnableMouse(false)
-      option:SetAlpha(0.3)
-    else
-      option:EnableMouse(true)
-      option:SetAlpha(1)
-    end
-
-    if option.SetValue and option.GetOptionValue then
-      option:SetValue(option:GetOptionValue(), true)
-    end
-  end
-
-  if multi then
-    Options.titleText:SetText("Multi-bar: Padding & Scale")
-  elseif focusedBar then
-    Options.titleText:SetText(focusedBar:GetName() .. " Options")
+  for _, option in ipairs(self.options) do
+    option:SetControlsEnabled(not multi or option.multi)
+    option:Refresh()
   end
 end
 
+local function CreateButton(label, tooltip, anchor, callback)
+  local button = CreateFrame("Button", nil, actions, "UIPanelButtonTemplate")
+  button:SetSize(UI.BUTTON_WIDTH, UI.BUTTON_HEIGHT)
+  button:SetPoint(anchor, actions, anchor, 0, 0)
+  button:SetText(label)
+  if tooltip then AttachTooltip(button, tooltip) end
+  button:SetScript("OnClick", callback)
+  return button
+end
+
+local function CreateShortcutHint()
+  local hint = CreateFrame("Button", nil, Options, "UIPanelInfoButton")
+  hint:SetPoint("TOPRIGHT", Options, "TOPRIGHT", -UI.HINT_SIZE - UI.CONTROL_GAP, -4)
+  hint:SetHitRectInsets(-4, -4, -4, -4)
+  hint:HookScript("OnEnter", function(owner)
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    GameTooltip_SetTitle(GameTooltip, "Shortcuts")
+    GameTooltip:AddLine("Ctrl-click an icon: add or remove it", 1, 1, 1)
+    GameTooltip:AddLine("Alt-click an icon, then a target: move or swap", 1, 1, 1)
+    GameTooltip:AddLine("Shift-click a bar: select several", 1, 1, 1)
+    GameTooltip:AddLine("Drag a handle onto another bar: anchor", 1, 1, 1)
+    GameTooltip:Show()
+  end)
+  hint:HookScript("OnLeave", function()
+    GameTooltip:Hide()
+  end)
+end
+
 function CBM.SetupOptionsUI()
-  local scaleSlider = Options:CreateSlider("Scale", sliderTypes.absolute, .001, 5, .05)
-  tinsert(Options.options, scaleSlider)
-  scaleSlider:BindOption("scale")
-  scaleSlider:SetPoint("TOP", titleText, "BOTTOM", 0, -10)
-
-  local offsetXSlider = Options:CreateSlider("Offset X", sliderTypes.floating, 40, nil, nil, true)
-  tinsert(Options.options, offsetXSlider)
-  offsetXSlider:BindOption("offsetX")
-  offsetXSlider:SetPoint("TOP", scaleSlider, "BOTTOM", 0, -10)
-
-  local offsetYSlider = Options:CreateSlider("Offset Y", sliderTypes.floating, 40, nil, nil, true)
-  tinsert(Options.options, offsetYSlider)
-  offsetYSlider:BindOption("offsetY")
-  offsetYSlider:SetPoint("TOP", offsetXSlider, "BOTTOM", 0, -10)
-
-  local paddingSlider = Options:CreateSlider("Padding", sliderTypes.floating, 10)
-  tinsert(Options.options, paddingSlider)
-  paddingSlider:BindOption("padding")
-  paddingSlider:SetPoint("TOP", offsetYSlider, "BOTTOM", 0, -10)
-
-  local orientationSwapper = Options:CreateSwapper("Orientation", "Horizontal", "Vertical")
-  tinsert(Options.options, orientationSwapper)
-  orientationSwapper:BindOption("isHorizontal")
-  orientationSwapper:SetPoint("TOP", paddingSlider, "BOTTOM", 0, -10)
-
-  local anchorTextBox = Options:CreateTextBox("Anchor Target")
-  tinsert(Options.options, anchorTextBox)
-  anchorTextBox:BindOption("anchorTarget")
-  anchorTextBox:SetPoint("TOP", orientationSwapper, "BOTTOM", 0, -10)
-
-  local anchorTargetSelect = Options:CreateAnchorSelect("Anchor Point")
-  tinsert(Options.options, anchorTargetSelect)
-  anchorTargetSelect:BindOption("anchorPoint")
-  anchorTargetSelect:SetPoint("TOPLEFT", anchorTextBox, "BOTTOMLEFT", 0, -10)
-
-  local targetPointSelect = Options:CreateAnchorSelect("Target Point")
-  tinsert(Options.options, targetPointSelect)
-  targetPointSelect:BindOption("targetPoint")
-  targetPointSelect:SetPoint("TOPRIGHT", anchorTextBox, "BOTTOMRIGHT", 0, -10)
-
-  local newBarButton = Options:CreateButton("New Bar", function()
-    if CBM.NewBar then CBM.NewBar() end
-  end)
-  newBarButton:SetPoint("TOPLEFT", anchorTargetSelect, "BOTTOMLEFT", 0, -30)
-
-  local deleteBarButton = Options:CreateButton("Delete Bar", function()
-    if CBM.DeleteFocusedBar then CBM.DeleteFocusedBar() end
-  end)
-  deleteBarButton:SetPoint("TOPRIGHT", targetPointSelect, "BOTTOMRIGHT", 0, -30)
-
-  if CBM.updateMessage then
-    local notif = Options.updateNotification
-    notif:Show()
-    notif.textContent:SetText(CBM.updateMessage)
-    notif:SetWindowSize(CBM.updateLength or 40)
+  local y = 0
+  -- Stacks a widget under the previous one; widgets are full content width unless they size themselves.
+  local function Place(widget, height, gap)
+    y = y + gap
+    widget:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+    widget:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, -y)
+    y = y + height
+  end
+  local function PlaceHeader(text)
+    local header = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    header:SetHeight(UI.HEADER_HEIGHT)
+    header:SetJustifyH("LEFT")
+    header:SetText(text)
+    Place(header, UI.HEADER_HEIGHT, UI.SECTION_GAP)
+  end
+  local function AddOption(widget, height, gap)
+    Options.options[#Options.options + 1] = widget
+    Place(widget, height, gap)
   end
 
-  if not (CBM.GetFocusedBar and CBM.GetFocusedBar()) then
-    Options:UpdateOptions()
-  end
+  barLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
+  barLabel:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, 0)
+  y = UI.HEADER_HEIGHT
+
+  PlaceHeader("Layout")
+  AddOption(CreateSlider(content, {
+    label = "Scale", option = "scale", min = 0.05, max = 5, step = 0.05, multi = true,
+  }), UI.ROW_HEIGHT, UI.ROW_GAP)
+  AddOption(CreateSlider(content, {
+    label = "Padding", option = "padding", float = 10, step = 1, multi = true,
+  }), UI.ROW_HEIGHT, UI.ROW_GAP)
+  AddOption(CreateSwapper(content, "Orientation", "isHorizontal", "Horizontal", "Vertical"),
+    UI.ROW_HEIGHT, UI.ROW_GAP)
+
+  PlaceHeader("Position")
+  AddOption(CreateSlider(content, {
+    label = "Offset X", option = "offsetX", float = 40, step = 1, zero = true,
+  }), UI.ROW_HEIGHT, UI.ROW_GAP)
+  AddOption(CreateSlider(content, {
+    label = "Offset Y", option = "offsetY", float = 40, step = 1, zero = true,
+  }), UI.ROW_HEIGHT, UI.ROW_GAP)
+
+  PlaceHeader("Anchor")
+  AddOption(CreateTargetBox(content, "Anchor target", "anchorTarget"), UI.ROW_HEIGHT, UI.ROW_GAP)
+
+  local barPoint = CreatePointGrid(content, "Bar point", "anchorPoint")
+  local targetPoint = CreatePointGrid(content, "Target point", "targetPoint")
+  Options.options[#Options.options + 1] = barPoint
+  Options.options[#Options.options + 1] = targetPoint
+  y = y + UI.ROW_GAP
+  barPoint:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+  targetPoint:SetPoint("TOPLEFT", barPoint, "TOPRIGHT", UI.SECTION_GAP * 2, 0)
+  y = y + barPoint:GetHeight()
+
+  content:SetHeight(y)
+
+  CreateButton("New bar", nil, "LEFT", function()
+    CBM.NewBar()
+  end)
+  CreateButton("Delete bar", "Delete the selected bars", "RIGHT", function()
+    CBM.DeleteFocusedBar()
+  end)
+  CreateShortcutHint()
+
+  Options:SetHeight(UI.FRAME_CHROME + UI.PAD + y + UI.PAD + UI.BUTTON_HEIGHT + UI.PAD)
+
+  Options:UpdateOptions()
 end
