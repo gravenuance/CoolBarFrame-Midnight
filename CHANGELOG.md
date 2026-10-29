@@ -92,6 +92,8 @@ All notable changes to CoolBarFrame are documented in this file.
   wrappers around icon placement are gone, since Blizzard's cooldown
   viewer never makes its icons forbidden; real errors now reach the error
   frame instead of being swallowed.
+- A second `/cbm` while edit mode was waiting for combat to end did not
+  cancel it; it now does, and says so.
 
 ## [0.3] - 2026-09-12
 

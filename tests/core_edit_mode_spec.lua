@@ -45,6 +45,18 @@ t.test("/cbm in combat defers entering until combat ends", function()
   t.truthy(client.env.CooldownViewerSettings:IsShown())
 end)
 
+t.test("a second /cbm in combat cancels the pending enter", function()
+  local client = loggedIn()
+  client.inCombat = true
+  client.slash("")
+  client.slash("")
+  t.eq(client.lastPrint(), "|cffffd200CoolBarFrame:|r Edit mode won't open after combat.")
+  client.inCombat = false
+  client.event("PLAYER_REGEN_ENABLED")
+  t.falsy(client.ns.editModeActive)
+  t.falsy(client.env.CooldownViewerSettings:IsShown())
+end)
+
 t.test("an activating combat restriction closes edit mode before lockdown", function()
   local client = loggedIn()
   client.slash("")

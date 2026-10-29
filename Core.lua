@@ -830,8 +830,11 @@ function CBM.EventFrame:ADDON_LOADED(_, addon)
     msg = string.lower(msg or "")
     local arg = msg:match("^(%S+)")
     if not arg or arg == "" then
-      if CBM.SetEditMode(not CBM.editModeActive) then
+      local cancelling = pendingEditMode
+      if CBM.SetEditMode(not (CBM.editModeActive or pendingEditMode)) then
         CBM.Print("Edit mode opens when combat ends.")
+      elseif cancelling then
+        CBM.Print("Edit mode won't open after combat.")
       end
     elseif arg == "new" then
       CBM.NewBar()
