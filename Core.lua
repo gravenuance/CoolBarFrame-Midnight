@@ -80,13 +80,13 @@ CoolBarDB = CoolBarDB or {
 -------------------------------------------------
 
 CBM.BarFramePool = CreateFramePool(
-  "Frame",       -- 1. frameType: the type of frame to create
-  UIParent,      -- 2. parent: the parent frame
-  nil,           -- 3. template: XML template name (optional)
-  nil,           -- 4. resetFunc: function called when frame is released (optional)
-  nil,           -- 5. frameNum: initial number of frames to create (optional)
-  function(self) -- 6. initFunc: function called when frame is acquired
-    CBM.InitBarFrame(self)
+  "Frame",       -- 1. frameType
+  UIParent,      -- 2. parent
+  nil,           -- 3. template
+  nil,           -- 4. resetFunc: the default hides the frame and clears its anchors on release
+  nil,           -- 5. forbidden: must stay nil, addons cannot create forbidden frames
+  function(frame) -- 6. postCreate: runs once per newly created frame, not on every Acquire
+    CBM.InitBarFrame(frame)
   end
 )
 
@@ -801,15 +801,9 @@ function CBM.DeleteFocusedBar()
 
   -- Focus the next available bar, or clear focus if none exist
   wipe(selectedBars)
-  local nextBar = nil
-  for bar in CBM.BarFramePool:EnumerateActive() do
-    nextBar = bar
-    break
-  end
+  local nextBar = CBM.BarFramePool:GetNextActive()
   if nextBar then
     CBM.SetFocus(nextBar, false)
-    -- else
-    --   wipe(selectedBars)
   end
   CBM.RelayoutBars()
 end
