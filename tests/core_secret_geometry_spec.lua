@@ -39,6 +39,37 @@ t.test("a saved bar anchored to secret geometry loads and lays out its icon", fu
   t.truthy(client.ns.editModeActive)
 end)
 
+local function withSecondBar()
+  local client = t.newClient({ savedData = { version = 2, bars = {
+    { name = "customBar0", anchorTarget = "SecretFrame", offsetX = 5 },
+    { name = "customBar1" },
+  } } })
+  local frame = client.env.CreateFrame("Frame", "SecretFrame", client.env.UIParent)
+  frame:SetSize(100, 50)
+  frame:SetPoint("CENTER")
+  frame.anchoringSecret = true
+  client.login()
+  client.slash("")
+  local bars = client.bars()
+  return client, bars[1], bars[2]
+end
+
+t.test("an anchor-handle drop onto a bar with secret geometry is refused", function()
+  local client, secretBar, bar = withSecondBar()
+  client.fire(bar.anchorPoints.TOP, "OnMouseDown", "LeftButton")
+  client.fire(secretBar.anchorPoints.BOTTOM, "OnEnter")
+  client.fire(bar.anchorPoints.TOP, "OnMouseUp", "LeftButton")
+  t.eq(bar.settings.anchorTarget, "UIParent")
+end)
+
+t.test("an anchor-handle drag refused at the press does not anchor on release", function()
+  local client, secretBar, bar = withSecondBar()
+  client.fire(secretBar.anchorPoints.TOP, "OnMouseDown", "LeftButton")
+  client.fire(bar.anchorPoints.BOTTOM, "OnEnter")
+  client.fire(secretBar.anchorPoints.TOP, "OnMouseUp", "LeftButton")
+  t.eq(secretBar.settings.anchorTarget, "SecretFrame")
+end)
+
 t.test("dragging a bar anchored to secret geometry leaves it and its settings alone", function()
   local client = clientWithSecretFrame()
   client.login()

@@ -315,13 +315,15 @@ function CBM.InitBarFrame(bar)
     handle:SetScript("OnMouseUp", function(self, button)
       if button ~= "LeftButton" then return end
       -- Stop the line first, or every early return below leaves it following the cursor.
+      local dragging = bar.anchorDrag == point
       bar.anchorDrag = nil
 
-      if not currentBarAnchorTarget
+      if not dragging -- the press was refused, but the release still comes to this handle
+          or not currentBarAnchorTarget
           or CBM.IsModifierKeyDown()
           or currentBarAnchorTarget == bar
           or not currentBarTargetPoint
-          or CBM.RejectAnchorLoop(bar.settings.name, currentBarAnchorTarget.settings.name)
+          or CBM.RejectAnchorTarget(bar.settings.name, currentBarAnchorTarget.settings.name)
       then
         currentBarAnchorTarget = nil
         bar:SetAnchorLine()

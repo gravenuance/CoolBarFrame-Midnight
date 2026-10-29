@@ -125,8 +125,8 @@ All notable changes to CoolBarFrame are documented in this file.
   `IsAnchoringSecret`) raised secret-value errors when it was laid out,
   dragged or drew its anchor line. Such frames are refused as anchor
   targets with a message; a bar already anchored to one from saved data
-  still loads and lays out its icons, but can't be dragged and shows no
-  anchor line.
+  still loads and lays out its icons, but can't be dragged, re-anchored by
+  its handles, or used as a handle-drop target, and shows no anchor line.
 
 ## [0.3] - 2026-09-12
 

@@ -350,7 +350,7 @@ function CBM.SetEditMode(requested)
   if active ~= CBM.editModeActive then
     deferred = ApplyEditMode(active)
   end
-  -- Set last: the window and options frame hooks re-enter SetEditMode while ApplyEditMode runs.
+  -- Set last: the window's OnShow/OnHide hooks re-enter SetEditMode while ApplyEditMode runs.
   pendingEditMode = deferred
   return deferred
 end

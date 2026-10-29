@@ -92,8 +92,9 @@ function Client.new(options)
     self.shown = false
     fire(self, "OnHide")
   end
+  -- C-side in the client: a hooksecurefunc on the frame's Lua Show/Hide fields does not run.
   function Frame:SetShown(shown)
-    if shown then self:Show() else self:Hide() end
+    if shown then Frame.Show(self) else Frame.Hide(self) end
   end
 
   function Frame:IsAnchoringSecret()
