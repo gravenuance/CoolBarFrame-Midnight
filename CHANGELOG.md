@@ -94,6 +94,8 @@ All notable changes to CoolBarFrame are documented in this file.
   frame instead of being swallowed.
 - A second `/cbm` while edit mode was waiting for combat to end did not
   cancel it; it now does, and says so.
+- Click-through on bars and icons set during combat waited for a boss
+  encounter to end as well; it is now applied as soon as combat ends.
 
 ## [0.3] - 2026-09-12
 

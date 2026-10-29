@@ -2,7 +2,7 @@ local t = ...
 
 -- Edit mode as wired in Core.lua, driven through the fake client's Cooldown Manager window and events.
 
-local COMBAT = 0
+local COMBAT, ENCOUNTER = 0, 1
 
 local function loggedIn(savedBars)
   local client = t.newClient({ savedData = { version = 2, bars = savedBars or { { name = "customBar0" } } } })
@@ -55,6 +55,21 @@ t.test("a second /cbm in combat cancels the pending enter", function()
   client.event("PLAYER_REGEN_ENABLED")
   t.falsy(client.ns.editModeActive)
   t.falsy(client.env.CooldownViewerSettings:IsShown())
+end)
+
+t.test("click-through set during combat is applied when combat ends, even mid-encounter", function()
+  local client = loggedIn()
+  client.inCombat = true
+  client.event("ADDON_RESTRICTION_STATE_CHANGED", ENCOUNTER, 2)
+  client.slash("new")
+  local newBar
+  for _, bar in ipairs(client.bars()) do
+    if bar.name == "customBar1" then newBar = bar end
+  end
+  t.eq(newBar.propagateClicks, nil, "deferred in combat")
+  client.inCombat = false
+  client.event("PLAYER_REGEN_ENABLED")
+  t.eq(newBar.propagateClicks, true)
 end)
 
 t.test("an activating combat restriction closes edit mode before lockdown", function()

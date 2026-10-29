@@ -302,8 +302,8 @@ local function SyncEditModeWithViewerSettings()
 end
 
 local function ResumeAfterBlock()
+  if not InCombatLockdown() then FlushDeferredClicks() end
   if IsEditModeBlocked() then return end
-  FlushDeferredClicks()
   if pendingEditMode then
     CBM.SetEditMode(true)
   end
