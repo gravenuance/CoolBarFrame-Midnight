@@ -15,6 +15,10 @@ All notable changes to CoolBarFrame are documented in this file.
   (it is unused here and replacing a Blizzard global risks taint).
 
 ### Fixed
+- Rebuilding the bars (loading screen, spec or talent change) left the
+  icon-to-bar lookup pointing at released bars and queued no layout, so
+  icons stayed where they were until Blizzard next laid a viewer out. The
+  lookup is cleared and a layout is queued.
 - Releasing the mouse after a bar drag while holding Shift, Ctrl or Alt left
   the bar stuck to the cursor; the drag now always ends on release.
 - Removing an icon from a bar now also resets its charge/stack badge scale,

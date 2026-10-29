@@ -801,6 +801,7 @@ end
 
 local function SetupBars()
   CBM.BarFramePool:ReleaseAll()
+  wipe(iconBarMap)
 
   local lastBar
   for _, barData in ipairs(CoolBarDB.bars) do
@@ -814,6 +815,7 @@ local function SetupBars()
   end
 
   CBM.SetFocus(lastBar, false)
+  CBM.QueueUpdate("ExecuteLayout")
 end
 
 local function ResetBars()
