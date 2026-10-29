@@ -13,3 +13,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local tooling
+*.bak
+CLAUDE.md
+.claude/
