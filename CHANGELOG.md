@@ -9,6 +9,8 @@ All notable changes to CoolBarFrame are documented in this file.
   (it is unused here and replacing a Blizzard global risks taint).
 
 ### Fixed
+- Releasing the mouse after a bar drag while holding Shift, Ctrl or Alt left
+  the bar stuck to the cursor; the drag now always ends on release.
 - Removing an icon from a bar now also resets its charge/stack badge scale,
   and restores the icon to the viewer's current icon scale instead of the
   scale captured the first time the icon was seen.

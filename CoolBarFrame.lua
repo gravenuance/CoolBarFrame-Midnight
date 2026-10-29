@@ -116,9 +116,6 @@ function CBM.InitBarFrame(bar)
 
   bar:SetScript("OnMouseUp", function(self, button)
     if button == "LeftButton" and self.isMoving then
-      if CBM.IsModifierKeyDown() then
-        return
-      end
       finalDetachedX, finalDetachedY = GetOffsets(bar:GetPoint())
       self:StopMovingOrSizing(self)
       self.isMoving = false
