@@ -4,6 +4,10 @@ All notable changes to CoolBarFrame are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Option edit boxes accept negative numbers and decimals (e.g. an offset of
+  `-50`); invalid text restores the previous value.
+
 ## [0.3] - 2026-09-12
 
 ### Fixed

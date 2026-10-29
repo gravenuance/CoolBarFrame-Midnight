@@ -307,27 +307,22 @@ function Options:CreateSlider(name, type, min, max, step, zeroButton)
   editBox:SetPoint("BOTTOM", slider, "BOTTOM", 2, 0)
   editBox:SetText("0")
   editBox:SetAutoFocus(false)
-  editBox:SetNumeric(true)
   editBox:SetPropagateMouseClicks(true)
 
-  editBox:SetScript("OnEditFocusLost", function(self)
-    local val = self:GetText()
-    if tonumber(val) then
-      slider:SetValue(val, true)
+  local function CommitText(self)
+    local number = CBM.Logic.ParseNumber(self:GetText())
+    if number then
+      slider:SetValue(number, true)
     else
       self:SetText(slider:GetOptionValue())
     end
-  end)
+  end
+
+  editBox:SetScript("OnEditFocusLost", CommitText)
 
   editBox:SetScript("OnEnterPressed", function(self)
-    local val = self:GetText()
-    if tonumber(val) then
-      slider:SetValue(val, true)
-      self:ClearFocus()
-    else
-      self:SetText(slider:GetOptionValue())
-      self:ClearFocus()
-    end
+    CommitText(self)
+    self:ClearFocus()
   end)
 
   editBox:Hide()
