@@ -280,7 +280,7 @@ function CBM.InitBarFrame(bar)
 
     handle:SetScript("OnLeave", function()
       handleTex:SetColorTexture(1, .5, 0, .4)
-      if currentBarAnchorTarget and currentBarAnchorTarget == bar.name then
+      if currentBarAnchorTarget == bar then
         currentBarAnchorTarget = nil
       end
       currentBarTargetPoint = nil
@@ -309,13 +309,13 @@ function CBM.InitBarFrame(bar)
     end)
 
     handle:SetScript("OnMouseUp", function(self, button)
-      if button ~= "LeftButton" or not currentBarAnchorTarget then return end
-      if CBM.IsModifierKeyDown() then
-        return
-      end
+      if button ~= "LeftButton" then return end
+      -- Stop the line first, or every early return below leaves it following the cursor.
       bar.anchorDrag = nil
 
-      if currentBarAnchorTarget == bar
+      if not currentBarAnchorTarget
+          or CBM.IsModifierKeyDown()
+          or currentBarAnchorTarget == bar
           or not currentBarTargetPoint
           or CBM.RejectAnchorLoop(bar.settings.name, currentBarAnchorTarget.settings.name)
       then

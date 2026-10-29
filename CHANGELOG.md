@@ -85,6 +85,8 @@ All notable changes to CoolBarFrame are documented in this file.
   detached on load instead of raising `SetPoint` errors.
 - Option edit boxes accept negative numbers and decimals (e.g. an offset of
   `-50`); invalid text restores the previous value.
+- Releasing an anchor-handle drag over empty space or with a modifier held
+  left the blue anchor line following the cursor.
 
 ## [0.3] - 2026-09-12
 
