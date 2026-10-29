@@ -6,6 +6,7 @@
 ## Version: 0.3
 ## Category: Matcha Latte
 
+CoolBarLogic.lua
 Core.lua
 CoolBarOptions.lua
 CoolBarFrame.lua

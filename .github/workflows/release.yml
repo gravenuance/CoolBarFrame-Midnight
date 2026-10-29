@@ -33,7 +33,7 @@ jobs:
       - name: Package addon
         run: |
           mkdir -p dist/CoolBarFrame
-          cp CoolBarFrame.toc CoolBarFrame.lua Core.lua CoolBarOptions.lua README.md dist/CoolBarFrame/
+          cp CoolBarFrame.toc CoolBarLogic.lua CoolBarFrame.lua Core.lua CoolBarOptions.lua README.md dist/CoolBarFrame/
           cd dist
           zip -r "CoolBarFrame-${{ steps.version.outputs.version }}.zip" CoolBarFrame
 
