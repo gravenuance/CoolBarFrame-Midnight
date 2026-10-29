@@ -4,6 +4,8 @@ All notable changes to CoolBarFrame are documented in this file.
 
 ## [Unreleased]
 
+## [0.4] - 2026-10-29
+
 ### Changed
 - The options frame is rebuilt from Blizzard's own templates (panel frame,
   stepper sliders, input boxes, panel buttons) and opens beside the Cooldown

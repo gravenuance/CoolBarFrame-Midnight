@@ -3,7 +3,7 @@
 ## Notes: Emulate infinite Cooldown Manager bars, mixing both buff and cooldown icons.
 ## Author: deez nuts
 ## SavedVariables: CoolBarDB
-## Version: 0.3
+## Version: 0.4
 ## Category: Matcha Latte
 
 CoolBarLogic.lua
