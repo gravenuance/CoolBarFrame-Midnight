@@ -321,10 +321,6 @@ local function CAN_ACCESS_VALUE(value)
   return true
 end
 
-if not FindBaseSpellByID then
-  FindBaseSpellByID = C_SpellBook.FindBaseSpellByID
-end
-
 function CBM.ToggleEditMode(forceOff)
   if InCombatLockdown() and not forceOff then return end
   CBM.editModeActive = forceOff and false or not CBM.editModeActive

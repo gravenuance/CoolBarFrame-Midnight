@@ -4,6 +4,10 @@ All notable changes to CoolBarFrame are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- The addon no longer overwrites Blizzard's global `FindBaseSpellByID`
+  (it is unused here and replacing a Blizzard global risks taint).
+
 ### Fixed
 - Zoning or any loading screen no longer stacks another set of hooks and
   option widgets: edit mode toggled itself twice (the Cooldown Manager
