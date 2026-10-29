@@ -35,6 +35,7 @@ stds.wow = {
 
     -- Constants and tables
     "C_ClassTalents",
+    "C_RestrictedActions",
     "C_Timer",
     "Enum",
     "NORMAL_FONT_COLOR",

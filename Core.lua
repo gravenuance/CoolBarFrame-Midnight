@@ -247,6 +247,15 @@ local pendingEditMode = false   -- an enter request waiting for combat/encounter
 local deferredClicks = setmetatable({}, { __mode = "k" }) -- frame -> propagate, postponed past combat
 local hookedFrames = setmetatable({}, { __mode = "k" })   -- Blizzard frames we already hooked
 
+-- No restriction event arrives after a /reload mid-encounter, so the current state is read on load.
+local function ReadRestrictions()
+  local getState = C_RestrictedActions and C_RestrictedActions.GetAddOnRestrictionState
+  if type(getState) ~= "function" then return end
+  for kind in pairs(BLOCKING_RESTRICTIONS) do
+    CBM.Logic.ApplyRestrictionEvent(restrictions, kind, getState(kind), Enum.AddOnRestrictionState.Inactive)
+  end
+end
+
 local function IsEditModeBlocked()
   return CBM.Logic.IsBlocked(restrictions, InCombatLockdown(), BLOCKING_RESTRICTIONS)
 end
@@ -891,6 +900,7 @@ local function SetupOnce()
 end
 
 function CBM.EventFrame:PLAYER_ENTERING_WORLD()
+  ReadRestrictions()
   SetupOnce()
   SetupBars()
 

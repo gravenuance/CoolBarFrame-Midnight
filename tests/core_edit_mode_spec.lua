@@ -72,6 +72,18 @@ t.test("click-through set during combat is applied when combat ends, even mid-en
   t.eq(newBar.propagateClicks, true)
 end)
 
+t.test("a reload during an encounter keeps edit mode closed until it ends", function()
+  local client = t.newClient({ savedData = { version = 2, bars = { { name = "customBar0" } } } })
+  client.restrictionStates[ENCOUNTER] = 2
+  client.login()
+  client.slash("")
+  t.falsy(client.ns.editModeActive)
+  t.falsy(client.env.CooldownViewerSettings:IsShown())
+  client.restrictionStates[ENCOUNTER] = 0
+  client.event("ADDON_RESTRICTION_STATE_CHANGED", ENCOUNTER, 0)
+  t.truthy(client.ns.editModeActive)
+end)
+
 t.test("an activating combat restriction closes edit mode before lockdown", function()
   local client = loggedIn()
   client.slash("")

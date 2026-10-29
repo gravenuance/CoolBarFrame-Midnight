@@ -96,6 +96,9 @@ All notable changes to CoolBarFrame are documented in this file.
   cancel it; it now does, and says so.
 - Click-through on bars and icons set during combat waited for a boss
   encounter to end as well; it is now applied as soon as combat ends.
+- After a `/reload` during a boss encounter, `/cbm` or opening the Cooldown
+  Manager window entered edit mode mid-encounter, because only restriction
+  changes were tracked. The current restrictions are now read on load.
 
 ## [0.3] - 2026-09-12
 
