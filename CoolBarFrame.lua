@@ -397,33 +397,30 @@ function CBM.InitBarFrame(bar)
   end
 
   function bar:SetBarPoint(roundAlg, roundArg)
-    local anchorTarget = GetFrameFromName(self.settings.anchorTarget)
+    local settings = self.settings
+    local anchorTarget = GetFrameFromName(settings.anchorTarget)
 
     if roundAlg then
       if type(roundAlg) ~= "function" then
         roundAlg = trimRound
       end
-      self.settings.offsetX = roundAlg(self.settings.offsetX, roundArg)
-      self.settings.offsetY = roundAlg(self.settings.offsetY, roundArg)
+      settings.offsetX = roundAlg(settings.offsetX, roundArg)
+      settings.offsetY = roundAlg(settings.offsetY, roundArg)
     end
 
-    if not anchorTarget then
-      self.settings.anchorPoint, anchorTarget, self.settings.targetPoint, self.settings.offsetX, self.settings.offsetY =
-          "CENTER", UIParent, "CENTER",
-          self.settings.absoluteX - (GetScreenWidth() - bar:GetWidth()) / 2,
-          self.settings.absoluteY - (GetScreenHeight() - bar:GetHeight()) / 2
-
-      self.settings.anchorTarget = "UIParent"
-      bar:SetBarPoint(trimRound)
-      SafeUpdateOptions()
-      return
-    end
+    local point, relativePoint, x, y, usesSavedTarget = CBM.Logic.PlanBarPlacement(
+      settings, anchorTarget ~= nil, GetScreenWidth(), GetScreenHeight(), self:GetWidth(), self:GetHeight())
 
     self:ClearAllPoints()
-    self:SetPoint(self.settings.anchorPoint, anchorTarget, self.settings.targetPoint, self.settings.offsetX,
-      self.settings.offsetY)
-    self.settings.absoluteX = self:GetLeft()
-    self.settings.absoluteY = self:GetBottom()
+    self:SetPoint(point, usesSavedTarget and anchorTarget or UIParent, relativePoint, x, y)
+
+    -- A missing target is placed temporarily; the saved anchor and position stay for when it exists.
+    if usesSavedTarget then
+      local left, bottom = self:GetLeft(), self:GetBottom()
+      if left and bottom then
+        settings.absoluteX, settings.absoluteY = left, bottom
+      end
+    end
   end
 
   function bar:UpdateFocused()

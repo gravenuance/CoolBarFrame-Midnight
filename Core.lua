@@ -753,7 +753,10 @@ function CBM.CreateNewBar(name, settings)
     bar:SetAnchorLine()
   end)
 
-  CBM.SetFocus(bar, false)
+  -- Bars restored from saved data are placed and focused together by SetupBars once all of them exist.
+  if not settings then
+    CBM.SetFocus(bar, false)
+  end
 
   if CBM.editModeActive then bar:Show() end
   return bar
@@ -825,14 +828,19 @@ end
 
 local function SetupBars()
   CBM.BarFramePool:ReleaseAll()
+
+  local lastBar
   for _, barData in ipairs(CoolBarDB.bars) do
     barData.icons = barData.icons or {} -- guard against bar entries saved by an older/partial schema
-    CBM.CreateNewBar(barData.name, barData)
+    lastBar = CBM.CreateNewBar(barData.name, barData)
   end
 
+  -- A bar can be anchored to a later bar, so every bar must exist before any is placed.
   for bar in CBM.BarFramePool:EnumerateActive() do
     bar:SetBarPoint()
   end
+
+  CBM.SetFocus(lastBar, false)
 end
 
 local function ResetBars()

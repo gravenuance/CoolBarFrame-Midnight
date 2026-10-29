@@ -47,6 +47,19 @@ function Logic.IsBlocked(restrictions, inCombat, blockingKinds)
   return false
 end
 
+-- Where to SetPoint a bar: its saved anchor, or a temporary screen-centre placement at its last
+-- known position when the target frame is missing. Never changes settings, so a target that is
+-- merely not created yet keeps its saved anchor. Returns point, relativePoint, x, y, usesSavedTarget.
+function Logic.PlanBarPlacement(settings, targetExists, screenW, screenH, barW, barH)
+  if targetExists then
+    return settings.anchorPoint, settings.targetPoint, settings.offsetX, settings.offsetY, true
+  end
+  return "CENTER", "CENTER",
+      settings.absoluteX - (screenW - barW) / 2,
+      settings.absoluteY - (screenH - barH) / 2,
+      false
+end
+
 -- Detaches (to UIParent) the first bar of every anchor loop in saved bar settings; returns how many.
 function Logic.BreakAnchorCycles(bars)
   local byName = {}

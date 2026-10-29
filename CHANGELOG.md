@@ -9,6 +9,11 @@ All notable changes to CoolBarFrame are documented in this file.
   (it is unused here and replacing a Blizzard global risks taint).
 
 ### Fixed
+- A bar anchored to another bar kept its anchor only by luck: loading in,
+  changing spec or changing talents placed bars one at a time, and a bar
+  anchored to a bar created later was permanently reset to the screen
+  centre. All bars now exist before any is placed, and a missing anchor
+  target only places the bar temporarily without touching the saved anchor.
 - Edit mode now follows the Cooldown Manager window through an explicit
   open/closed state instead of a toggle, so closing the window or the
   options frame during combat no longer leaves edit mode stuck on. The
