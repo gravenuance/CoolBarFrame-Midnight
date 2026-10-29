@@ -330,15 +330,20 @@ function CBM.EnableDefaultBarClicks(defaultBar)
   CBM.ToggleDefaultIconClicks(defaultBar)
 end
 
-function CBM.ToggleDefaultIconClicks(defaultBar)
-  local scopeDefaultBars = defaultBars
-  if defaultBar then scopeDefaultBars = { defaultBar } end
+local function ToggleViewerIconClicks(viewer)
+  for icon in viewer.itemFramePool:EnumerateActive() do
+    icon:SetMouseClickEnabled(CBM.editModeActive)
+    icon:SetMouseMotionEnabled(viewer.tooltipsShown)
+  end
+end
 
-  for _, bar in pairs(scopeDefaultBars) do
-    for icon in bar.itemFramePool:EnumerateActive() do
-      icon:SetMouseClickEnabled(CBM.editModeActive)
-      icon:SetMouseMotionEnabled(bar.tooltipsShown)
-    end
+function CBM.ToggleDefaultIconClicks(defaultBar)
+  if defaultBar then
+    ToggleViewerIconClicks(defaultBar)
+    return
+  end
+  for _, viewer in pairs(defaultBars) do
+    ToggleViewerIconClicks(viewer)
   end
 end
 
