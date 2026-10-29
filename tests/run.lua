@@ -88,6 +88,15 @@ function t.newNamespace(...)
   return ns
 end
 
+-- Loads the addon into a fresh fake client (tests/fake_client.lua); options.savedData is CoolBarDB.
+local FakeClient = assert(loadfile(root .. "/tests/fake_client.lua"))()
+function t.newClient(options)
+  options = options or {}
+  options.root = root
+  return FakeClient.new(options)
+end
+t.SECRET = FakeClient.SECRET
+
 function t.test(name, fn)
   local ok, err = pcall(fn)
   if ok then
