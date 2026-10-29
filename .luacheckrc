@@ -54,6 +54,7 @@ stds.wow = {
     "IsShiftKeyDown",
     "ShowUIPanel",
     "hooksecurefunc",
+    "issecretvalue",
     "tinsert",
     "wipe",
   },

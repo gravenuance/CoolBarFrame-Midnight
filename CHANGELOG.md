@@ -118,6 +118,12 @@ All notable changes to CoolBarFrame are documented in this file.
   target returned. Dragging now moves only its screen position and keeps
   the saved anchor and offsets; the offset controls are disabled and the
   options frame names the missing target while it is gone.
+- A bar anchored to a frame whose position is secret (12.x
+  `IsAnchoringSecret`) raised secret-value errors when it was laid out,
+  dragged or drew its anchor line. Such frames are refused as anchor
+  targets with a message; a bar already anchored to one from saved data
+  still loads and lays out its icons, but can't be dragged and shows no
+  anchor line.
 
 ## [0.3] - 2026-09-12
 

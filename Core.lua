@@ -123,6 +123,25 @@ function CBM.RejectAnchorLoop(barName, targetName)
   return true
 end
 
+-- A frame anchored to secret geometry returns secret positions and sizes, which addon code can't compare or do maths on.
+function CBM.HasSecretGeometry(frame)
+  return type(frame.IsAnchoringSecret) == "function" and frame:IsAnchoringSecret()
+end
+
+-- True (after telling the user why) when barName can't anchor to the frame named targetName.
+function CBM.RejectAnchorTarget(barName, targetName)
+  local target = CBM.GetFrameFromName(targetName)
+  if not target then
+    CBM.Print("No frame named " .. targetName .. ".")
+    return true
+  end
+  if CBM.HasSecretGeometry(target) then
+    CBM.Print(barName .. " can't anchor to " .. targetName .. ": its position is secret.")
+    return true
+  end
+  return CBM.RejectAnchorLoop(barName, targetName)
+end
+
 function CBM.GetFocusedBar()
   for _, selected in pairs(selectedBars) do
     if selected then
@@ -171,9 +190,9 @@ function CBM.UpdateBar(bar)
         or (currentTargetPoint ~= s.targetPoint)
   end
 
-  -- Save old position if anchor changed
+  -- Save old position if anchor changed (a secret position can't be carried over)
   local oldLeft, oldBottom
-  if anchorChanged then
+  if anchorChanged and not CBM.HasSecretGeometry(bar) then
     oldLeft = bar:GetLeft()
     oldBottom = bar:GetBottom()
   end

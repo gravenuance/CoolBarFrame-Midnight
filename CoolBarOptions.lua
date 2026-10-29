@@ -365,12 +365,8 @@ local function CreateTargetBox(parent, label, option)
   function row:Commit(text)
     text = text:match("^%s*(.-)%s*$")
     local bar = CBM.GetFocusedBar()
-    if text ~= "" and text ~= self:GetOptionValue() and bar then
-      if not CBM.GetFrameFromName(text) then
-        CBM.Print("No frame named " .. text .. ".")
-      elseif not CBM.RejectAnchorLoop(bar.settings.name, text) then
-        self:SetOptionValue(text)
-      end
+    if text ~= "" and text ~= self:GetOptionValue() and bar and not CBM.RejectAnchorTarget(bar.settings.name, text) then
+      self:SetOptionValue(text)
     end
     self:Refresh()
   end

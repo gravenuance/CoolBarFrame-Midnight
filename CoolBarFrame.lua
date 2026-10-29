@@ -53,6 +53,10 @@ local function minimalRound(number, maxDecimals)
   return number
 end
 
+local function IsSecret(value)
+  return issecretvalue ~= nil and issecretvalue(value)
+end
+
 function CBM.InitBarFrame(bar)
   bar:SetFrameStrata("MEDIUM")
   bar:SetFrameLevel(2)
@@ -108,6 +112,9 @@ function CBM.InitBarFrame(bar)
     -- Focus bar on click (without multi-select)
     SafeSetFocus(self, false)
 
+    -- The drop maths needs the bar's position, which is secret while it hangs off secret geometry.
+    if CBM.HasSecretGeometry(self) then return end
+
     self:StartMoving()
     initDetachedX, initDetachedY = GetOffsets(bar:GetPoint())
     self.isMoving = true
@@ -158,7 +165,7 @@ function CBM.InitBarFrame(bar)
 
     if bar.settings.anchorTarget then
       local anchorTarget = GetFrameFromName(bar.settings.anchorTarget)
-      if anchorTarget then
+      if anchorTarget and not CBM.HasSecretGeometry(anchorTarget) then
         -- Get absolute screen position of bar's anchor point
         local barAnchorX, barAnchorY
         if bar.settings.anchorPoint == "CENTER" then
@@ -288,6 +295,7 @@ function CBM.InitBarFrame(bar)
         return
       end
       SafeSetFocus(bar, false)
+      if CBM.HasSecretGeometry(bar) then return end
       bar.anchorDrag = point
       bar.anchorLine:SetStartPoint(point, 0, 0)
       bar.anchorLine:SetEndPoint(point, 0, 0)
@@ -337,6 +345,10 @@ function CBM.InitBarFrame(bar)
   l:SetColorTexture(0, 0, 1)
 
   function bar:SetAnchorLine()
+    -- The line's end is the bar's offset, which is secret while the bar hangs off secret geometry.
+    local hasSecretGeometry = CBM.HasSecretGeometry(self)
+    self.anchorLine:SetShown(not hasSecretGeometry)
+    if hasSecretGeometry then return end
     self.anchorLine:SetStartPoint(self.settings.anchorPoint, 0, 0)
     local X, Y = GetOffsets(self:GetPoint())
     self.anchorLine:SetEndPoint(self.settings.anchorPoint, -X, -Y)
@@ -353,9 +365,10 @@ function CBM.InitBarFrame(bar)
     local targetPoint = isFirst and "TOPLEFT" or (isHorizontal and "RIGHT" or "BOTTOM")
     local padding = isFirst and 0 or self.settings.padding
 
-    -- Base size from Masque/Blizzard.
-    local baseW = icon:GetWidth() > 0 and icon:GetWidth() or DEFAULT_ICON_HEIGHT
-    local baseH = icon:GetHeight() > 0 and icon:GetHeight() or DEFAULT_ICON_HEIGHT
+    -- Base size from Masque/Blizzard; secret while the icon hangs off secret geometry.
+    local width, height = icon:GetWidth(), icon:GetHeight()
+    local baseW = (not IsSecret(width) and width > 0) and width or DEFAULT_ICON_HEIGHT
+    local baseH = (not IsSecret(height) and height > 0) and height or DEFAULT_ICON_HEIGHT
 
     -- Normalize utility icons a bit.
     local source = CBM.iconKind[icon]
@@ -415,7 +428,7 @@ function CBM.InitBarFrame(bar)
     self.parkedFor = not usesSavedTarget and settings.anchorTarget or nil -- the missing target's name
 
     -- A missing target is placed temporarily; the saved anchor and position stay for when it exists.
-    if usesSavedTarget then
+    if usesSavedTarget and not CBM.HasSecretGeometry(self) then
       local left, bottom = self:GetLeft(), self:GetBottom()
       if left and bottom then
         settings.absoluteX, settings.absoluteY = left, bottom
