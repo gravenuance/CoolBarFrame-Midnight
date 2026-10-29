@@ -2,6 +2,9 @@
 -- Runs every tests/*_spec.lua; each spec receives the test API `t` as its first
 -- chunk argument. Exits non-zero when any test fails.
 
+-- wowlint lints tests/ against the addon sandbox, which has no io/os/package; the standalone interpreter does.
+---@diagnostic disable: undefined-global
+
 local root = (arg and arg[0] or ""):match("^(.*)[/\\]tests[/\\]run%.lua$") or "."
 local isWindows = package.config:sub(1, 1) == "\\"
 

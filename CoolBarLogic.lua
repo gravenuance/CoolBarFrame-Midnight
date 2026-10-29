@@ -26,6 +26,27 @@ function Logic.WouldCreateAnchorCycle(barName, targetName, getAnchorTarget)
   return false
 end
 
+-- Edit mode follows an explicit request (never a toggle). Returns the new state and whether an
+-- enter request was deferred because something blocks it; leaving is always allowed.
+function Logic.PlanEditMode(active, requested, blocked)
+  if requested == active then return active, false end
+  if requested and blocked then return active, true end
+  return requested, false
+end
+
+-- restrictions[kind] mirrors ADDON_RESTRICTION_STATE_CHANGED: restricted from "activating" until inactive.
+function Logic.ApplyRestrictionEvent(restrictions, kind, state, inactiveState)
+  restrictions[kind] = state ~= inactiveState
+end
+
+function Logic.IsBlocked(restrictions, inCombat, blockingKinds)
+  if inCombat then return true end
+  for kind in pairs(blockingKinds) do
+    if restrictions[kind] then return true end
+  end
+  return false
+end
+
 -- Detaches (to UIParent) the first bar of every anchor loop in saved bar settings; returns how many.
 function Logic.BreakAnchorCycles(bars)
   local byName = {}

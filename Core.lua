@@ -42,6 +42,7 @@ end
 local iconBarMap = {} -- cooldownID -> bar frame
 local idIconMap = {}  -- cooldownID -> icon frame
 
+local setupDone = false -- hooks and option widgets exist; set on the first PLAYER_ENTERING_WORLD
 local fullRemap
 local queuedFunctions
 local queuedClickFunctions
@@ -317,60 +318,74 @@ end
 -- EDIT MODE / ICON CLICKING
 -------------------------------------------------
 
-local function CAN_ACCESS_VALUE(value)
-  return true
+-- Restriction kinds under which opening Blizzard UI from addon code is unsafe.
+local BLOCKING_RESTRICTIONS = {
+  [Enum.AddOnRestrictionType.Combat] = true,
+  [Enum.AddOnRestrictionType.Encounter] = true,
+}
+local restrictions = {}         -- restriction kind -> true from "activating" until inactive
+local pendingEditMode = false   -- an enter request waiting for combat/encounter to end
+local deferredClicks = setmetatable({}, { __mode = "k" }) -- frame -> propagate, postponed past combat
+local hookedFrames = setmetatable({}, { __mode = "k" })   -- Blizzard frames we already hooked
+
+local function IsEditModeBlocked()
+  return CBM.Logic.IsBlocked(restrictions, InCombatLockdown(), BLOCKING_RESTRICTIONS)
 end
 
-function CBM.ToggleEditMode(forceOff)
-  if InCombatLockdown() and not forceOff then return end
-  CBM.editModeActive = forceOff and false or not CBM.editModeActive
-  CooldownViewerSettings:SetShown(CBM.editModeActive)
+-- SetPropagateMouseClicks is a restricted function, so it waits for combat to end.
+function CBM.SetPropagateClicks(frame, propagate)
+  if InCombatLockdown() then
+    deferredClicks[frame] = propagate
+    return
+  end
+  frame:SetPropagateMouseClicks(propagate)
+end
+
+local function FlushDeferredClicks()
+  for frame, propagate in pairs(deferredClicks) do
+    deferredClicks[frame] = nil
+    frame:SetPropagateMouseClicks(propagate)
+  end
+end
+
+local function ApplyEditMode(active)
+  CBM.editModeActive = active
+
   for bar in CBM.BarFramePool:EnumerateActive() do
-    if not CBM.editModeActive then
-      bar:Hide()
-    else
-      bar:Show()
-    end
+    bar:SetShown(active)
   end
+  CBM.OptionsFrame:SetShown(active)
 
-  if not CBM.editModeActive then
-    if CBM.OptionsFrame then CBM.OptionsFrame:Hide() end
-  else
-    if CBM.OptionsFrame then CBM.OptionsFrame:Show() end
-  end
-
-  if CAN_ACCESS_VALUE(defaultBars[1].IsShown) then
-    -- Secure wrapper: only trigger if untainted
-    local ok, err = pcall(EventRegistry.TriggerEvent, EventRegistry, "CooldownViewerSettings.OnShow",
-      CooldownViewerSettings)
-    if not ok then CBM.fallBackUpdateShownState() end -- Fallback if tainted
-  else
-    CBM.fallBackUpdateShownState()
+  -- Blizzard's window goes through the UI panel manager; calling its methods or events from here would taint its code.
+  local settings = CooldownViewerSettings
+  if settings and settings:IsShown() ~= active then
+    if active then ShowUIPanel(settings) else HideUIPanel(settings) end
   end
 
   CBM.ToggleDefaultIconClicks()
 end
 
-function CBM.SetIconShownOverrides(defaultBar)
-  if not defaultBar.showHook then
-    defaultBar.showHook = true
-    hooksecurefunc(defaultBar, "UpdateShownState", function(self)
-      if CBM.editModeActive and (not InCombatLockdown()) then
-        local ok, err = pcall(self.SetShown, self, true)
-        if not ok then return end -- Silently skip tainted frames
-      end
-    end)
+-- Returns true when an enter request had to wait for combat/encounter to end.
+function CBM.SetEditMode(requested)
+  local active, deferred = CBM.Logic.PlanEditMode(CBM.editModeActive, requested, IsEditModeBlocked())
+  pendingEditMode = deferred
+  if active ~= CBM.editModeActive then
+    ApplyEditMode(active)
   end
+  return deferred
+end
 
-  if defaultBar == BuffIconCooldownViewer then
-    for icon in defaultBar.itemFramePool:EnumerateActive() do
-      if not icon.showHook then
-        icon.showHook = true
-        hooksecurefunc(icon, "UpdateShownState", function(self)
-          if self.cooldownID and CBM.editModeActive then self:SetShown(true) end
-        end)
-      end
-    end
+-- Blizzard's window is the source of truth for whether edit mode is wanted.
+local function SyncEditModeWithViewerSettings()
+  local settings = CooldownViewerSettings
+  CBM.SetEditMode(settings ~= nil and settings:IsShown())
+end
+
+local function ResumeAfterBlock()
+  if IsEditModeBlocked() then return end
+  FlushDeferredClicks()
+  if pendingEditMode then
+    CBM.SetEditMode(true)
   end
 end
 
@@ -378,12 +393,10 @@ function CBM.EnableDefaultBarClicks(defaultBar)
   if EditModeManagerFrame:IsShown() then return end
 
   for icon in defaultBar.itemFramePool:EnumerateActive() do
-    if not InCombatLockdown() then
-      icon:SetPropagateMouseClicks(true)
-    end
-    if not icon.clickHooked then
-      icon.clickHooked = true
-      icon:SetScript("OnMouseDown", function(self, button)
+    CBM.SetPropagateClicks(icon, true)
+    if not hookedFrames[icon] then
+      hookedFrames[icon] = true
+      icon:HookScript("OnMouseDown", function(self, button)
         if button ~= "LeftButton" then return end
         if IsControlKeyDown() then
           CBM.AddOrRemoveIcon(self, button)
@@ -394,11 +407,7 @@ function CBM.EnableDefaultBarClicks(defaultBar)
     end
   end
 
-  CBM.SetIconShownOverrides(defaultBar)
   CBM.ToggleDefaultIconClicks(defaultBar)
-
-  local icon = defaultBar.itemFramePool:GetNextActive()
-  defaultBar.iconWidth = icon and icon:GetWidth() or DEFAULT_ICON_HEIGHT
 end
 
 function CBM.ToggleDefaultIconClicks(defaultBar)
@@ -422,6 +431,23 @@ local DEFAULT_SCALE = {
   ["BUFF"] = nil,
 }
 
+local iconHome = setmetatable({}, { __mode = "k" }) -- icon -> {point, relativeTo, relativePoint, x, y} as Blizzard last placed it
+
+-- Runs right after Blizzard lays a viewer out, before ExecuteLayout moves icons onto custom bars.
+local function CaptureIconHomes(defaultBar)
+  for icon in defaultBar.itemFramePool:EnumerateActive() do
+    local point, relativeTo, relativePoint, x, y = icon:GetPoint(1)
+    if relativeTo == defaultBar then
+      local home = iconHome[icon]
+      if not home then
+        home = {}
+        iconHome[icon] = home
+      end
+      home[1], home[2], home[3], home[4], home[5] = point, relativeTo, relativePoint, x, y
+    end
+  end
+end
+
 -- Blizzard's cooldown-viewer icons can turn into forbidden frames (12.1 aura API hardening);
 -- pcall so a forbidden icon can't abort the rest of the removal/cleanup loop.
 local function RestoreIcon(icon)
@@ -429,6 +455,12 @@ local function RestoreIcon(icon)
   pcall(function()
     icon:SetScale(DEFAULT_SCALE[icon._CBM_Source] or 1)
     icon:SetAlpha(1)
+    -- Re-laying the viewer out ourselves would run Blizzard's code tainted, so put the icon back by hand.
+    local home = iconHome[icon]
+    if home then
+      icon:ClearAllPoints()
+      icon:SetPoint(home[1], home[2], home[3], home[4], home[5])
+    end
   end)
 end
 
@@ -461,20 +493,9 @@ function CBM.UpdateIDIconMap()
   end
 end
 
-function CBM.ResetDefaultLayouts()
+function CBM.RelayoutBars()
   CBM.UpdateIDIconMap()
-  for _, defaultBar in pairs(defaultBars) do
-    defaultBar:Layout()
-  end
-end
-
-function CBM.fallBackUpdateShownState()
-  for _, defaultBar in pairs(defaultBars) do
-    if CBM.editModeActive then defaultBar:SetShown(true) end
-    for icon in defaultBar.itemFramePool:EnumerateActive() do
-      if CBM.editModeActive then icon:SetShown(true) end
-    end
-  end
+  CBM.ExecuteLayout()
 end
 
 function CBM.ExecuteLayout()
@@ -525,7 +546,7 @@ function CBM.AddOrRemoveIcon(icon, button)
           break
         end
       end
-      CBM.ResetDefaultLayouts()
+      CBM.RelayoutBars()
     else
       bar = CBM.GetFocusedBar()
       if bar then
@@ -544,7 +565,7 @@ function CBM.AddOrRemoveIcon(icon, button)
         wipe(bar.settings.icons)
       end
     end
-    CBM.ResetDefaultLayouts()
+    CBM.RelayoutBars()
   else
     return
   end
@@ -795,7 +816,7 @@ function CBM.DeleteFocusedBar()
     -- else
     --   wipe(selectedBars)
   end
-  CBM.ResetDefaultLayouts()
+  CBM.RelayoutBars()
 end
 
 -------------------------------------------------
@@ -815,16 +836,11 @@ local function SetupBars()
 end
 
 local function ResetBars()
-  if not CBM.OptionsFrame then return end
-
-  local restore = CBM.editModeActive
-  if CBM.editModeActive then CBM.ToggleEditMode() end
+  if not setupDone then return end
 
   CBM.SetFocus(nil, false)
   SetupBars()
   fullRemap = true
-
-  if restore then CBM.ToggleEditMode() end
 
   if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
     CBM.OptionsFrame:UpdateOptions()
@@ -887,15 +903,24 @@ CBM.EventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 CBM.EventFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
 CBM.EventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
 CBM.EventFrame:RegisterEvent("ADDON_RESTRICTION_STATE_CHANGED")
+CBM.EventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 CBM.EventFrame:SetScript("OnEvent", function(self, event, ...)
   if self[event] then self[event](self, event, ...) end
 end)
 
-function CBM.EventFrame:ADDON_RESTRICTION_STATE_CHANGED()
-  if InCombatLockdown() and CBM.editModeActive then
-    CBM.ToggleEditMode(true)
+-- Fires before a restriction is enforced and after it ends, so closing Blizzard's window here is still allowed.
+function CBM.EventFrame:ADDON_RESTRICTION_STATE_CHANGED(_, kind, state)
+  CBM.Logic.ApplyRestrictionEvent(restrictions, kind, state, Enum.AddOnRestrictionState.Inactive)
+  if IsEditModeBlocked() then
+    if CBM.editModeActive then CBM.SetEditMode(false) end
+  else
+    ResumeAfterBlock()
   end
+end
+
+function CBM.EventFrame:PLAYER_REGEN_ENABLED()
+  ResumeAfterBlock()
 end
 
 function CBM.EventFrame:ADDON_LOADED(_, addon)
@@ -913,7 +938,9 @@ function CBM.EventFrame:ADDON_LOADED(_, addon)
     msg = string.lower(msg or "")
     local arg = msg:match("^(%S+)")
     if not arg or arg == "" then
-      CBM.ToggleEditMode()
+      if CBM.SetEditMode(not CBM.editModeActive) then
+        CBM.Print("Edit mode opens when combat ends.")
+      end
     elseif arg == "new" then
       CBM.NewBar()
     elseif arg == "delete" then
@@ -937,8 +964,6 @@ function CBM.EventFrame:ADDON_LOADED(_, addon)
   end
 end
 
-local setupDone = false
-
 -- PLAYER_ENTERING_WORLD fires on every loading screen; hooks and option widgets must exist exactly once.
 local function SetupOnce()
   if setupDone then return end
@@ -946,19 +971,14 @@ local function SetupOnce()
 
   CBM.SetupOptionsUI()
 
-  local CVS = _G["CooldownViewerSettings"]
-  if CVS then
-    hooksecurefunc(CVS, "Show", function()
-      CBM.ToggleEditMode()
-    end)
-
-    hooksecurefunc(CVS, "Hide", function()
-      CBM.ToggleEditMode()
-    end)
+  if CooldownViewerSettings then
+    CooldownViewerSettings:HookScript("OnShow", SyncEditModeWithViewerSettings)
+    CooldownViewerSettings:HookScript("OnHide", SyncEditModeWithViewerSettings)
   end
 
   for _, defaultBar in pairs(defaultBars) do
     hooksecurefunc(defaultBar, "Layout", function()
+      CaptureIconHomes(defaultBar)
       if fullRemap then fullRemap = false end
       CBM.QueueUpdate("UpdateIDIconMap")
       CBM.QueueUpdate("ExecuteLayout")
@@ -986,9 +1006,11 @@ function CBM.EventFrame:PLAYER_ENTERING_WORLD()
   CBM.UpdateIDIconMap()
 
   for _, defaultBar in pairs(defaultBars) do
-    CBM.SetIconShownOverrides(defaultBar)
+    CaptureIconHomes(defaultBar)
     CBM.EnableDefaultBarClicks(defaultBar)
   end
+
+  SyncEditModeWithViewerSettings()
 end
 
 function CBM.EventFrame:ACTIVE_PLAYER_SPECIALIZATION_CHANGED()

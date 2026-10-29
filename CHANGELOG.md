@@ -9,6 +9,19 @@ All notable changes to CoolBarFrame are documented in this file.
   (it is unused here and replacing a Blizzard global risks taint).
 
 ### Fixed
+- Edit mode now follows the Cooldown Manager window through an explicit
+  open/closed state instead of a toggle, so closing the window or the
+  options frame during combat no longer leaves edit mode stuck on. The
+  `ADDON_RESTRICTION_STATE_CHANGED` payload is honoured (combat and boss
+  encounters), and `/cbm` during a restriction opens edit mode as soon as
+  it ends.
+- Opening and closing edit mode no longer calls Blizzard's cooldown viewer
+  `Layout()` or fires its `CooldownViewerSettings.OnShow` event from addon
+  code, which ran Blizzard's secret-value code tainted; the window is
+  opened with `ShowUIPanel`/`HideUIPanel`. Icons removed from a bar return to
+  the slot Blizzard last gave them.
+- Spec and talent changes no longer close and reopen the Cooldown Manager
+  window to rebuild the bars.
 - Zoning or any loading screen no longer stacks another set of hooks and
   option widgets: edit mode toggled itself twice (the Cooldown Manager
   window closed right after opening) and the options frame accumulated

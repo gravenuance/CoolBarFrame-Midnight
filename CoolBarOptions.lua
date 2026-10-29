@@ -18,9 +18,7 @@ Options.options = {}
 Options:Hide()
 
 hooksecurefunc(Options, "Hide", function()
-  if CBM.editModeActive and CBM.ToggleEditMode then
-    CBM.ToggleEditMode()
-  end
+  CBM.SetEditMode(false)
 end)
 
 local backdrop = Options:CreateTexture("ARTWORK")
@@ -52,11 +50,7 @@ closebutton:SetText("Close")
 closebutton:SetSize(80, 20)
 closebutton:SetPoint("BOTTOM", 0, 10)
 closebutton:SetScript("OnClick", function()
-  if CBM.ToggleEditMode then
-    CBM.ToggleEditMode()
-  else
-    Options:Hide()
-  end
+  CBM.SetEditMode(false)
 end)
 
 -- Help window
