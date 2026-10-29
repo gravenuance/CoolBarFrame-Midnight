@@ -5,6 +5,10 @@ All notable changes to CoolBarFrame are documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- A bar can no longer be anchored to itself or to a bar that depends on it
+  through a longer chain (A to B to C to A). Typing or dragging such an
+  anchor is rejected with a message, and a loop already in saved data is
+  detached on load instead of raising `SetPoint` errors.
 - Option edit boxes accept negative numbers and decimals (e.g. an offset of
   `-50`); invalid text restores the previous value.
 

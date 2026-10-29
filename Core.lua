@@ -172,6 +172,29 @@ function CBM.GetFrameFromName(name)
   return nil
 end
 
+function CBM.Print(text)
+  print("|cffffd200CoolBarFrame:|r " .. text)
+end
+
+local function GetSavedAnchorTarget(name)
+  for _, settings in ipairs(CoolBarDB.bars) do
+    if settings.name == name then return settings.anchorTarget end
+  end
+end
+
+-- True (after telling the user why) when anchoring barName to targetName would make a bar depend on itself.
+function CBM.RejectAnchorLoop(barName, targetName)
+  if not CBM.Logic.WouldCreateAnchorCycle(barName, targetName, GetSavedAnchorTarget) then
+    return false
+  end
+  if barName == targetName then
+    CBM.Print(barName .. " can't anchor to itself.")
+  else
+    CBM.Print(barName .. " can't anchor to " .. targetName .. ": it would loop.")
+  end
+  return true
+end
+
 function CBM.GetFocusedBar()
   for _, selected in pairs(selectedBars) do
     if selected then
@@ -883,6 +906,11 @@ function CBM.EventFrame:ADDON_LOADED(_, addon)
   if addon ~= addonName then return end
 
   MigrateDB(CoolBarDB)
+
+  local loopsRemoved = CBM.Logic.BreakAnchorCycles(CoolBarDB.bars)
+  if loopsRemoved > 0 then
+    CBM.Print(loopsRemoved .. " bar anchor loop(s) in saved data were detached from their targets.")
+  end
 
   SLASH_CoolBar1 = "/cbm"
   SlashCmdList.CoolBar = function(msg)

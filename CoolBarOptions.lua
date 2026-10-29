@@ -488,6 +488,12 @@ function Options:CreateTextBox(name)
       return
     end
 
+    local bar = GetPrimaryBar()
+    if bar and CBM.RejectAnchorLoop(bar.settings.name, newAnchor) then
+      self.editBox:SetText(self:GetOptionValue())
+      return
+    end
+
     self.editBox:SetText(newAnchor)
     self.editBox:SetCursorPosition(0)
     self:SetOptionValue(newAnchor)

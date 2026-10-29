@@ -308,8 +308,8 @@ function CBM.InitBarFrame(bar)
       bar.anchorDrag = nil
 
       if currentBarAnchorTarget == bar
-          or currentBarAnchorTarget.settings.anchorTarget == bar.settings.name
           or not currentBarTargetPoint
+          or CBM.RejectAnchorLoop(bar.settings.name, currentBarAnchorTarget.settings.name)
       then
         currentBarAnchorTarget = nil
         bar:SetAnchorLine()
