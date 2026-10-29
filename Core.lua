@@ -276,6 +276,7 @@ local function FlushDeferredClicks()
   end
 end
 
+-- Returns true when Blizzard's window stayed open while leaving, so edit mode resumes once unblocked.
 local function ApplyEditMode(active)
   CBM.editModeActive = active
 
@@ -283,7 +284,19 @@ local function ApplyEditMode(active)
   -- It opens first so the options frame can sit beside it.
   local settings = CooldownViewerSettings
   if settings and settings:IsShown() ~= active then
-    if active then ShowUIPanel(settings) else HideUIPanel(settings) end
+    if active then
+      ShowUIPanel(settings)
+    elseif not InCombatLockdown() then -- in lockdown HideUIPanel refuses and blames the addon
+      HideUIPanel(settings)
+    end
+  end
+
+  -- The panel manager can refuse either way; edit mode is only on while the window really is open.
+  local suspended = false
+  if settings and settings:IsShown() ~= active then
+    suspended = settings:IsShown()
+    active = false
+    CBM.editModeActive = false
   end
 
   for bar in CBM.BarFramePool:EnumerateActive() do
@@ -292,15 +305,17 @@ local function ApplyEditMode(active)
   CBM.OptionsFrame:SetShown(active)
 
   CBM.ToggleDefaultIconClicks()
+  return suspended
 end
 
--- Returns true when an enter request had to wait for combat/encounter to end.
+-- Returns true when edit mode waits for combat/encounter to end.
 function CBM.SetEditMode(requested)
   local active, deferred = CBM.Logic.PlanEditMode(CBM.editModeActive, requested, IsEditModeBlocked())
-  pendingEditMode = deferred
   if active ~= CBM.editModeActive then
-    ApplyEditMode(active)
+    deferred = ApplyEditMode(active)
   end
+  -- Set last: the window and options frame hooks re-enter SetEditMode while ApplyEditMode runs.
+  pendingEditMode = deferred
   return deferred
 end
 
@@ -840,10 +855,13 @@ function CBM.EventFrame:ADDON_LOADED(_, addon)
     local arg = msg:match("^(%S+)")
     if not arg or arg == "" then
       local cancelling = pendingEditMode
-      if CBM.SetEditMode(not (CBM.editModeActive or pendingEditMode)) then
+      local requested = not (CBM.editModeActive or pendingEditMode)
+      if not CBM.SetEditMode(requested) then
+        if cancelling then CBM.Print("Edit mode won't open after combat.") end
+      elseif requested then
         CBM.Print("Edit mode opens when combat ends.")
-      elseif cancelling then
-        CBM.Print("Edit mode won't open after combat.")
+      else
+        CBM.Print("Addons can't close the Cooldown Manager window in combat; press Escape to close it.")
       end
     elseif arg == "new" then
       CBM.NewBar()

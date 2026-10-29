@@ -99,6 +99,13 @@ All notable changes to CoolBarFrame are documented in this file.
 - After a `/reload` during a boss encounter, `/cbm` or opening the Cooldown
   Manager window entered edit mode mid-encounter, because only restriction
   changes were tracked. The current restrictions are now read on load.
+- If combat lockdown began before the addon learned of the combat
+  restriction, leaving edit mode called `HideUIPanel` in lockdown ("Interface
+  action failed because of an AddOn") and edit mode never came back. The
+  addon no longer calls it in lockdown: the bars and options frame hide, the
+  Cooldown Manager window stays open, and edit mode resumes after combat
+  unless you close the window. Edit mode also stays off when the window
+  cannot be opened at all.
 
 ## [0.3] - 2026-09-12
 

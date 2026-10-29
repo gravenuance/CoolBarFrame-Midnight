@@ -84,6 +84,53 @@ t.test("a reload during an encounter keeps edit mode closed until it ends", func
   t.truthy(client.ns.editModeActive)
 end)
 
+-- The client may report the combat restriction after lockdown has started; HideUIPanel then refuses.
+local function enterThenLockdown()
+  local client = loggedIn()
+  client.slash("")
+  client.inCombat = true
+  client.event("ADDON_RESTRICTION_STATE_CHANGED", COMBAT, 1)
+  return client
+end
+
+t.test("combat starting in lockdown suspends edit mode without a blocked action", function()
+  local client = enterThenLockdown()
+  t.eq(client.blockedActions, 0, "no addon call to HideUIPanel in lockdown")
+  t.falsy(client.ns.editModeActive)
+  t.falsy(barShown(client))
+  t.falsy(client.ns.OptionsFrame:IsShown())
+  t.truthy(client.env.CooldownViewerSettings:IsShown(), "window is left for the player to close")
+end)
+
+t.test("edit mode suspended by combat resumes when combat ends with the window open", function()
+  local client = enterThenLockdown()
+  client.inCombat = false
+  client.event("PLAYER_REGEN_ENABLED")
+  client.event("ADDON_RESTRICTION_STATE_CHANGED", COMBAT, 0)
+  t.truthy(client.ns.editModeActive)
+  t.truthy(barShown(client))
+  t.truthy(client.ns.OptionsFrame:IsShown())
+end)
+
+t.test("closing the window during combat drops the suspended edit mode", function()
+  local client = enterThenLockdown()
+  client.env.CooldownViewerSettings:Hide() -- Escape: Blizzard's own secure close works in combat
+  client.inCombat = false
+  client.event("PLAYER_REGEN_ENABLED")
+  client.event("ADDON_RESTRICTION_STATE_CHANGED", COMBAT, 0)
+  t.falsy(client.ns.editModeActive)
+  t.falsy(barShown(client))
+end)
+
+t.test("edit mode stays off when the panel manager refuses to open the window", function()
+  local client = loggedIn()
+  client.allPanelsDisallowed = true
+  client.slash("")
+  t.falsy(client.ns.editModeActive)
+  t.falsy(barShown(client))
+  t.falsy(client.ns.OptionsFrame:IsShown())
+end)
+
 t.test("an activating combat restriction closes edit mode before lockdown", function()
   local client = loggedIn()
   client.slash("")
