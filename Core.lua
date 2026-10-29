@@ -425,12 +425,15 @@ end
 -------------------------------------------------
 -- ICON MAPPING / LAYOUT
 -------------------------------------------------
-local DEFAULT_SCALE = {
-  ["ESSENTIAL"] = nil,
-  ["UTILITY"] = nil,
-  ["BUFF"] = nil,
+local VIEWER_KIND = {
+  [UtilityCooldownViewer]   = "UTILITY",
+  [EssentialCooldownViewer] = "ESSENTIAL",
+  [BuffIconCooldownViewer]  = "BUFF",
 }
 
+-- Per-icon bookkeeping lives here, not in fields on Blizzard's frames.
+local iconViewer = setmetatable({}, { __mode = "k" }) -- icon -> the viewer that owns it
+CBM.iconKind = setmetatable({}, { __mode = "k" })     -- icon -> VIEWER_KIND of its viewer
 local iconHome = setmetatable({}, { __mode = "k" }) -- icon -> {point, relativeTo, relativePoint, x, y} as Blizzard last placed it
 
 -- Runs right after Blizzard lays a viewer out, before ExecuteLayout moves icons onto custom bars.
@@ -453,8 +456,12 @@ end
 local function RestoreIcon(icon)
   if not icon then return end
   pcall(function()
-    icon:SetScale(DEFAULT_SCALE[icon._CBM_Source] or 1)
+    local viewer = iconViewer[icon]
+    icon:SetScale(viewer and viewer.iconScale or 1)
     icon:SetAlpha(1)
+    if icon.ChargeCount then
+      icon.ChargeCount:SetScale(1)
+    end
     -- Re-laying the viewer out ourselves would run Blizzard's code tainted, so put the icon back by hand.
     local home = iconHome[icon]
     if home then
@@ -471,23 +478,8 @@ function CBM.UpdateIDIconMap()
     for icon in defaultBar.itemFramePool:EnumerateActive() do
       if icon.cooldownID then
         idIconMap[icon.cooldownID] = icon
-
-        if defaultBar == UtilityCooldownViewer then
-          if not DEFAULT_SCALE["UTILITY"] then
-            DEFAULT_SCALE["UTILITY"] = icon:GetScale()
-          end
-          icon._CBM_Source = "UTILITY"
-        elseif defaultBar == EssentialCooldownViewer then
-          if not DEFAULT_SCALE["ESSENTIAL"] then
-            DEFAULT_SCALE["ESSENTIAL"] = icon:GetScale()
-          end
-          icon._CBM_Source = "ESSENTIAL"
-        elseif defaultBar == BuffIconCooldownViewer then
-          if not DEFAULT_SCALE["BUFF"] then
-            DEFAULT_SCALE["BUFF"] = icon:GetScale()
-          end
-          icon._CBM_Source = "BUFF"
-        end
+        iconViewer[icon] = defaultBar
+        CBM.iconKind[icon] = VIEWER_KIND[defaultBar]
       end
     end
   end

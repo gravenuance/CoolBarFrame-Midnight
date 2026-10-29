@@ -354,7 +354,7 @@ function CBM.InitBarFrame(bar)
     local baseH = icon:GetHeight() > 0 and icon:GetHeight() or DEFAULT_ICON_HEIGHT
 
     -- Normalize utility icons a bit.
-    local source = icon._CBM_Source
+    local source = CBM.iconKind[icon]
     local sourceScale = 0.8
     local chargeScale = 2
     if source == "UTILITY" then
