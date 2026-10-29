@@ -21,6 +21,11 @@ hooksecurefunc(Options, "Hide", function()
   CBM.SetEditMode(false)
 end)
 
+-- Core skips refreshing a hidden options frame, so catch up when it opens.
+Options:SetScript("OnShow", function()
+  Options:UpdateOptions()
+end)
+
 local backdrop = Options:CreateTexture("ARTWORK")
 backdrop:SetAllPoints()
 backdrop:SetColorTexture(0, 0, 0, .8)

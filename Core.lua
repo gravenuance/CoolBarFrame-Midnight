@@ -173,6 +173,13 @@ function CBM.GetFrameFromName(name)
   return nil
 end
 
+-- The options frame refreshes itself when shown, so a hidden one skips the work.
+function CBM.RefreshOptions()
+  if CBM.OptionsFrame:IsShown() then
+    CBM.OptionsFrame:UpdateOptions()
+  end
+end
+
 function CBM.Print(text)
   print("|cffffd200CoolBarFrame:|r " .. text)
 end
@@ -223,9 +230,7 @@ function CBM.SetFocus(bar, useShift)
     customBar:UpdateFocused()
   end
 
-  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
-    CBM.OptionsFrame:UpdateOptions()
-  end
+  CBM.RefreshOptions()
 end
 
 function CBM.UpdateBar(bar)
@@ -256,9 +261,7 @@ function CBM.UpdateBar(bar)
     s.offsetY = s.offsetY + (oldBottom - bar:GetBottom())
     bar:SetBarPoint(CBM.trimRound)
 
-    if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
-      CBM.OptionsFrame:UpdateOptions()
-    end
+    CBM.RefreshOptions()
   end
 
   bar:SetAnchorLine()
@@ -266,11 +269,7 @@ end
 
 CBM.callbacks.SetFocus                  = CBM.SetFocus
 CBM.callbacks.UpdateBar                 = CBM.UpdateBar
-CBM.callbacks.UpdateOptions             = function()
-  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
-    CBM.OptionsFrame:UpdateOptions()
-  end
-end
+CBM.callbacks.UpdateOptions             = CBM.RefreshOptions
 CBM.callbacks.GetOffsets                = CBM.GetOffsets
 CBM.callbacks.GetFrameFromName          = CBM.GetFrameFromName
 CBM.callbacks.GetTableSize              = CBM.GetTableSize
@@ -506,9 +505,7 @@ function CBM.ExecuteLayout()
     end
   end
 
-  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
-    CBM.OptionsFrame:UpdateOptions()
-  end
+  CBM.RefreshOptions()
 end
 
 function CBM.AddOrRemoveIcon(icon, button)
@@ -562,9 +559,7 @@ function CBM.AddOrRemoveIcon(icon, button)
     return
   end
 
-  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
-    CBM.OptionsFrame:UpdateOptions()
-  end
+  CBM.RefreshOptions()
 end
 
 function CBM.MoveIconToOtherBar(icon, button)
@@ -670,9 +665,7 @@ function CBM.MoveIconToOtherBar(icon, button)
           moveSrc.settings.icons[moveIdx], otherBar.settings.icons[otherIndex]
 
       CBM.ExecuteLayout()
-      if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
-        CBM.OptionsFrame:UpdateOptions()
-      end
+      CBM.RefreshOptions()
       return
     end
   end
@@ -688,9 +681,7 @@ function CBM.MoveIconToOtherBar(icon, button)
   end
 
   CBM.ExecuteLayout()
-  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
-    CBM.OptionsFrame:UpdateOptions()
-  end
+  CBM.RefreshOptions()
 end
 
 -------------------------------------------------
@@ -732,7 +723,7 @@ function CBM.CreateNewBar(name, settings)
   end
 
   bar.name = name
-  bar.displayedIcons = {}
+  bar:ResetLayout()
 
   bar:SetWidth(DEFAULT_ICON_HEIGHT)
   bar:SetHeight(DEFAULT_ICON_HEIGHT)
@@ -756,9 +747,7 @@ end
 
 function CBM.NewBar()
   CBM.CreateNewBar()
-  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
-    CBM.OptionsFrame:UpdateOptions()
-  end
+  CBM.RefreshOptions()
 end
 
 function CBM.DeleteFocusedBar()
@@ -795,9 +784,7 @@ function CBM.DeleteFocusedBar()
     end
   end
 
-  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
-    CBM.OptionsFrame:UpdateOptions()
-  end
+  CBM.RefreshOptions()
 
   -- Focus the next available bar, or clear focus if none exist
   wipe(selectedBars)
@@ -836,9 +823,7 @@ local function ResetBars()
   SetupBars()
   fullRemap = true
 
-  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
-    CBM.OptionsFrame:UpdateOptions()
-  end
+  CBM.RefreshOptions()
 end
 
 -------------------------------------------------
@@ -993,9 +978,7 @@ function CBM.EventFrame:PLAYER_ENTERING_WORLD()
   SetupOnce()
   SetupBars()
 
-  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
-    CBM.OptionsFrame:UpdateOptions()
-  end
+  CBM.RefreshOptions()
 
   CBM.UpdateIDIconMap()
 

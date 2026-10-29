@@ -5,6 +5,9 @@ All notable changes to CoolBarFrame are documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Cooldown viewer layout passes no longer allocate: bar icon lists are
+  reused, no closure is created per icon, and the options frame is only
+  refreshed while it is visible (it catches up when opened).
 - Creating a bar during combat no longer calls the restricted
   `SetPropagateMouseClicks`; it is applied when combat ends, like the same
   call on Blizzard's icons.
