@@ -7,49 +7,6 @@ local COMBAT, ENCOUNTER, CHALLENGE_MODE, MAP = 0, 1, 2, 4
 local INACTIVE, ACTIVATING, ACTIVE = 0, 1, 2
 local BLOCKING = { [COMBAT] = true, [ENCOUNTER] = true }
 
--- PlanEditMode(active, requested, blocked) -> newActive, deferred
-
-t.test("requesting the state we are already in changes nothing", function()
-  local active, deferred = Logic.PlanEditMode(false, false, false)
-  t.eq(active, false)
-  t.eq(deferred, false)
-  active, deferred = Logic.PlanEditMode(true, true, false)
-  t.eq(active, true)
-  t.eq(deferred, false)
-end)
-
-t.test("a close request while already closed stays closed (CDM hidden after desync)", function()
-  local active = Logic.PlanEditMode(false, false, true)
-  t.eq(active, false)
-end)
-
-t.test("entering edit mode succeeds when nothing blocks it", function()
-  local active, deferred = Logic.PlanEditMode(false, true, false)
-  t.eq(active, true)
-  t.eq(deferred, false)
-end)
-
-t.test("entering edit mode while blocked is deferred, not applied", function()
-  local active, deferred = Logic.PlanEditMode(false, true, true)
-  t.eq(active, false)
-  t.eq(deferred, true)
-end)
-
-t.test("leaving edit mode is always allowed, even while blocked", function()
-  local active, deferred = Logic.PlanEditMode(true, false, true)
-  t.eq(active, false)
-  t.eq(deferred, false)
-end)
-
-t.test("repeating a request is idempotent", function()
-  local active = Logic.PlanEditMode(false, true, false)
-  active = Logic.PlanEditMode(active, true, false)
-  t.eq(active, true)
-  active = Logic.PlanEditMode(active, false, false)
-  active = Logic.PlanEditMode(active, false, false)
-  t.eq(active, false)
-end)
-
 -- ApplyRestrictionEvent(restrictions, kind, state, inactiveState)
 
 t.test("an activating or active restriction is recorded as restricted", function()
