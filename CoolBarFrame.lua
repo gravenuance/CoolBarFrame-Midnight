@@ -53,17 +53,6 @@ local function minimalRound(number, maxDecimals)
   return number
 end
 
--- Module-level so pcall(PlaceIcon, ...) allocates no closure per icon on every layout pass.
-local function PlaceIcon(icon, scale, chargeScale, anchorPoint, anchorTarget, targetPoint, padding)
-  icon:SetAlpha(0.8)
-  icon:SetScale(scale)
-  if icon.ChargeCount then
-    icon.ChargeCount:SetScale(chargeScale)
-  end
-  icon:ClearAllPoints()
-  icon:SetPoint(anchorPoint, anchorTarget, targetPoint, padding, 0)
-end
-
 function CBM.InitBarFrame(bar)
   bar:SetFrameStrata("MEDIUM")
   bar:SetFrameLevel(2)
@@ -376,12 +365,14 @@ function CBM.InitBarFrame(bar)
     local appliedScale = (self.settings.scale or 1) * sourceScale
     local targetChargeScale = (self.settings.scale or 1) * chargeScale
 
+    icon:SetAlpha(0.8)
+    icon:SetScale(appliedScale)
     -- ChargeCount is a child of icon, so its effective size is chargeScale * appliedScale; divide out the parent's scale so it lands on targetChargeScale.
-    -- Blizzard's cooldown-viewer icons can turn into forbidden frames (12.1 aura API hardening);
-    -- skip this icon rather than erroring out of the whole layout pass if that happens.
-    local ok = pcall(PlaceIcon, icon, appliedScale, targetChargeScale / appliedScale, anchorPoint, anchorTarget,
-      targetPoint, padding)
-    if not ok then return end
+    if icon.ChargeCount then
+      icon.ChargeCount:SetScale(targetChargeScale / appliedScale)
+    end
+    icon:ClearAllPoints()
+    icon:SetPoint(anchorPoint, anchorTarget, targetPoint, padding, 0)
 
     tinsert(self.displayedIcons, icon)
 

@@ -87,6 +87,11 @@ All notable changes to CoolBarFrame are documented in this file.
   `-50`); invalid text restores the previous value.
 - Releasing an anchor-handle drag over empty space or with a modifier held
   left the blue anchor line following the cursor.
+- A saved bar scale of 0 or below made every icon on that bar silently
+  vanish; saved scales are raised to the 0.05 minimum on load. The `pcall`
+  wrappers around icon placement are gone, since Blizzard's cooldown
+  viewer never makes its icons forbidden; real errors now reach the error
+  frame instead of being swallowed.
 
 ## [0.3] - 2026-09-12
 

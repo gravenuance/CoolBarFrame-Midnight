@@ -559,7 +559,7 @@ function CBM.SetupOptionsUI()
 
   PlaceHeader("Layout")
   AddOption(CreateSlider(content, {
-    label = "Scale", option = "scale", min = 0.05, max = 5, step = 0.05, multi = true,
+    label = "Scale", option = "scale", min = Logic.MIN_SCALE, max = 5, step = 0.05, multi = true,
   }), UI.ROW_HEIGHT, UI.ROW_GAP)
   AddOption(CreateSlider(content, {
     label = "Padding", option = "padding", float = 10, step = 1, multi = true,

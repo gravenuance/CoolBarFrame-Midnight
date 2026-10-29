@@ -376,24 +376,20 @@ local function CaptureIconHomes(defaultBar)
   end
 end
 
--- Blizzard's cooldown-viewer icons can turn into forbidden frames (12.1 aura API hardening);
--- pcall so a forbidden icon can't abort the rest of the removal/cleanup loop.
 local function RestoreIcon(icon)
   if not icon then return end
-  pcall(function()
-    local viewer = iconViewer[icon]
-    icon:SetScale(viewer and viewer.iconScale or 1)
-    icon:SetAlpha(1)
-    if icon.ChargeCount then
-      icon.ChargeCount:SetScale(1)
-    end
-    -- Re-laying the viewer out ourselves would run Blizzard's code tainted, so put the icon back by hand.
-    local home = iconHome[icon]
-    if home then
-      icon:ClearAllPoints()
-      icon:SetPoint(home[1], home[2], home[3], home[4], home[5])
-    end
-  end)
+  local viewer = iconViewer[icon]
+  icon:SetScale(viewer and viewer.iconScale or 1)
+  icon:SetAlpha(1)
+  if icon.ChargeCount then
+    icon.ChargeCount:SetScale(1)
+  end
+  -- Re-laying the viewer out ourselves would run Blizzard's code tainted, so put the icon back by hand.
+  local home = iconHome[icon]
+  if home then
+    icon:ClearAllPoints()
+    icon:SetPoint(home[1], home[2], home[3], home[4], home[5])
+  end
 end
 
 function CBM.UpdateIDIconMap()

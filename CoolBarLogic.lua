@@ -132,12 +132,19 @@ function Logic.NewBarSettings(name)
   }
 end
 
+-- SetScale rejects 0, so a smaller saved scale would make every icon on the bar fail to lay out.
+Logic.MIN_SCALE = 0.05
+
 -- Fills fields that are missing or of the wrong type; every valid user value stays.
 function Logic.MergeBarDefaults(settings)
   for key, default in pairs(Logic.NewBarSettings(settings.name)) do
     if type(settings[key]) ~= type(default) then
       settings[key] = default
     end
+  end
+  local scale = settings.scale
+  if scale ~= scale or scale < Logic.MIN_SCALE then -- scale ~= scale is NaN
+    settings.scale = Logic.MIN_SCALE
   end
   return settings
 end

@@ -56,6 +56,13 @@ t.test("MergeBarDefaults replaces values of the wrong type", function()
   t.eq(bar.isHorizontal, true)
 end)
 
+t.test("MergeBarDefaults raises a zero, negative or NaN scale to the 0.05 minimum", function()
+  t.eq(Logic.MergeBarDefaults({ name = "b", scale = 0 }).scale, 0.05)
+  t.eq(Logic.MergeBarDefaults({ name = "b", scale = -2 }).scale, 0.05)
+  t.eq(Logic.MergeBarDefaults({ name = "b", scale = 0 / 0 }).scale, 0.05)
+  t.eq(Logic.MergeBarDefaults({ name = "b", scale = 0.05 }).scale, 0.05)
+end)
+
 t.test("MergeBarDefaults leaves a complete bar unchanged", function()
   local complete = defaultBar("b")
   complete.scale = 1.5
