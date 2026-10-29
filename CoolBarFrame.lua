@@ -64,7 +64,7 @@ function CBM.InitBarFrame(bar)
 
   bar:SetMovable(true)
   bar:EnableMouse(true)
-  bar:SetPropagateMouseClicks(true) -- CHANGED
+  CBM.SetPropagateClicks(bar, true)
 
   bar:SetScript("OnMouseDown", function(self, button)
     local mf = GetMouseFoci and GetMouseFoci() or {}

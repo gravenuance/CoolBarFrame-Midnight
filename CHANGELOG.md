@@ -5,6 +5,9 @@ All notable changes to CoolBarFrame are documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Creating a bar during combat no longer calls the restricted
+  `SetPropagateMouseClicks`; it is applied when combat ends, like the same
+  call on Blizzard's icons.
 - The addon no longer overwrites Blizzard's global `FindBaseSpellByID`
   (it is unused here and replacing a Blizzard global risks taint).
 
