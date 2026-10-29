@@ -32,6 +32,9 @@ All notable changes to CoolBarFrame are documented in this file.
   Per-icon bookkeeping moved out of Blizzard's frame tables, and the click
   handler on icons is added with `HookScript` instead of replacing
   `OnMouseDown`.
+- Releases now ship a SHA-256 checksum and a build provenance attestation
+  next to the zip, which is built reproducibly from the tag. Workflow
+  actions are pinned to commit SHAs and luacheck to 1.2.0.
 - The addon no longer overwrites Blizzard's global `FindBaseSpellByID`
   (it is unused here and replacing a Blizzard global risks taint).
 
