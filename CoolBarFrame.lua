@@ -120,8 +120,15 @@ function CBM.InitBarFrame(bar)
       self:StopMovingOrSizing(self)
       self.isMoving = false
 
-      self.settings.offsetX = initRelativeX + (finalDetachedX - initDetachedX)
-      self.settings.offsetY = initRelativeY + (finalDetachedY - initDetachedY)
+      local dx, dy = finalDetachedX - initDetachedX, finalDetachedY - initDetachedY
+      if self.parkedFor then
+        -- Only the screen position moves; the offsets from the missing target stay for when it returns.
+        self.settings.absoluteX = self.settings.absoluteX + dx
+        self.settings.absoluteY = self.settings.absoluteY + dy
+      else
+        self.settings.offsetX = initRelativeX + dx
+        self.settings.offsetY = initRelativeY + dy
+      end
 
       self:SetBarPoint(minimalRound, 2)
       SafeUpdateOptions()
@@ -405,6 +412,7 @@ function CBM.InitBarFrame(bar)
 
     self:ClearAllPoints()
     self:SetPoint(point, usesSavedTarget and anchorTarget or UIParent, relativePoint, x, y)
+    self.parkedFor = not usesSavedTarget and settings.anchorTarget or nil -- the missing target's name
 
     -- A missing target is placed temporarily; the saved anchor and position stay for when it exists.
     if usesSavedTarget then

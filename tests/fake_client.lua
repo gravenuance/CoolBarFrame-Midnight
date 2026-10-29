@@ -35,6 +35,7 @@ function Client.new(options)
   }
 
   local env = setmetatable({}, { __index = _G })
+  env._G = env
   client.env = env
 
   local Frame = {}

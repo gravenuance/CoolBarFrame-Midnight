@@ -230,11 +230,13 @@ end
 -- SLIDER ROW
 -------------------------------------------------
 
--- config: label, option, step, zero, multi, and either min/max (fixed range) or float (range follows the value).
+-- config: label, option, step, zero, multi, needsTarget (offsets from the anchor target), and either
+-- min/max (fixed range) or float (range follows the value).
 local function CreateSlider(parent, config)
   local row = CreateFrame("Frame", nil, parent)
   row:SetHeight(UI.ROW_HEIGHT)
   row.config = config
+  row.needsTarget = config.needsTarget
   row.label = CreateLabel(row, config.label)
   row.precision = Logic.GetRoundingPrecision(config.step)
   BindOption(row, config.option, 0, config.multi)
@@ -496,10 +498,18 @@ function Options:UpdateOptions()
   if not focused then return end
 
   local multi = selectedCount > 1
-  barLabel:SetText(multi and (selectedCount .. " bars selected") or focused:GetName())
+  -- Offsets are relative to the anchor target, so they have nothing to move while it is missing.
+  local parked = not multi and focused.parkedFor ~= nil
+  if multi then
+    barLabel:SetText(selectedCount .. " bars selected")
+  elseif parked then
+    barLabel:SetText(focused:GetName() .. " (" .. focused.parkedFor .. " missing; drag to move)")
+  else
+    barLabel:SetText(focused:GetName())
+  end
 
   for _, option in ipairs(self.options) do
-    option:SetControlsEnabled(not multi or option.multi)
+    option:SetControlsEnabled((not multi or option.multi) and not (parked and option.needsTarget))
     option:Refresh()
   end
 end
@@ -569,10 +579,10 @@ function CBM.SetupOptionsUI()
 
   PlaceHeader("Position")
   AddOption(CreateSlider(content, {
-    label = "Offset X", option = "offsetX", float = 40, step = 1, zero = true,
+    label = "Offset X", option = "offsetX", float = 40, step = 1, zero = true, needsTarget = true,
   }), UI.ROW_HEIGHT, UI.ROW_GAP)
   AddOption(CreateSlider(content, {
-    label = "Offset Y", option = "offsetY", float = 40, step = 1, zero = true,
+    label = "Offset Y", option = "offsetY", float = 40, step = 1, zero = true, needsTarget = true,
   }), UI.ROW_HEIGHT, UI.ROW_GAP)
 
   PlaceHeader("Anchor")

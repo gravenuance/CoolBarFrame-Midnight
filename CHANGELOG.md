@@ -112,6 +112,12 @@ All notable changes to CoolBarFrame are documented in this file.
   anchor loop raised `SetPoint` errors. Such data is now shown from a
   completed copy and never written: edit mode and `/cbm new`, `delete` and
   `reset` are refused with a message.
+- A bar whose anchor target is missing (for example another addon's frame,
+  with that addon disabled) snapped back after a drag, and the drag
+  overwrote its offsets from the target, so it landed far off once the
+  target returned. Dragging now moves only its screen position and keeps
+  the saved anchor and offsets; the offset controls are disabled and the
+  options frame names the missing target while it is gone.
 
 ## [0.3] - 2026-09-12
 

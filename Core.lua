@@ -159,11 +159,17 @@ function CBM.UpdateBar(bar)
 
   local s = bar.settings
 
-  -- Check if anchor settings have changed
-  local currentAnchor, currentTarget, currentTargetPoint = bar:GetPoint()
-  local anchorChanged = (currentAnchor ~= s.anchorPoint)
-      or (currentTarget and currentTarget:GetName() ~= s.anchorTarget)
-      or (currentTargetPoint ~= s.targetPoint)
+  -- Check if anchor settings have changed. A bar parked for a missing target sits on a temporary
+  -- screen anchor, so only a new target counts; when the same target is back its saved offsets win.
+  local anchorChanged
+  if bar.parkedFor then
+    anchorChanged = bar.parkedFor ~= s.anchorTarget
+  else
+    local currentAnchor, currentTarget, currentTargetPoint = bar:GetPoint()
+    anchorChanged = (currentAnchor ~= s.anchorPoint)
+        or (currentTarget and currentTarget:GetName() ~= s.anchorTarget)
+        or (currentTargetPoint ~= s.targetPoint)
+  end
 
   -- Save old position if anchor changed
   local oldLeft, oldBottom
