@@ -5,6 +5,10 @@ All notable changes to CoolBarFrame are documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Zoning or any loading screen no longer stacks another set of hooks and
+  option widgets: edit mode toggled itself twice (the Cooldown Manager
+  window closed right after opening) and the options frame accumulated
+  duplicate controls. Setup now runs once; only the bars are rebuilt.
 - A bar can no longer be anchored to itself or to a bar that depends on it
   through a longer chain (A to B to C to A). Typing or dragging such an
   anchor is rejected with a message, and a loop already in saved data is

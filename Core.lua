@@ -941,18 +941,14 @@ function CBM.EventFrame:ADDON_LOADED(_, addon)
   end
 end
 
-function CBM.EventFrame:PLAYER_ENTERING_WORLD()
-  SetupBars()
+local setupDone = false
 
-  if CBM.SetupOptionsUI then
-    CBM.SetupOptionsUI()
-  end
+-- PLAYER_ENTERING_WORLD fires on every loading screen; hooks and option widgets must exist exactly once.
+local function SetupOnce()
+  if setupDone then return end
+  setupDone = true
 
-  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
-    CBM.OptionsFrame:UpdateOptions()
-  end
-
-  CBM.UpdateIDIconMap()
+  CBM.SetupOptionsUI()
 
   local CVS = _G["CooldownViewerSettings"]
   if CVS then
@@ -966,7 +962,7 @@ function CBM.EventFrame:PLAYER_ENTERING_WORLD()
   end
 
   for _, defaultBar in pairs(defaultBars) do
-    hooksecurefunc(defaultBar, "Layout", function(self)
+    hooksecurefunc(defaultBar, "Layout", function()
       if fullRemap then fullRemap = false end
       CBM.QueueUpdate("UpdateIDIconMap")
       CBM.QueueUpdate("ExecuteLayout")
@@ -980,7 +976,20 @@ function CBM.EventFrame:PLAYER_ENTERING_WORLD()
     hooksecurefunc(defaultBar, "Hide", function()
       CBM.QueueUpdate("ExecuteLayout")
     end)
+  end
+end
 
+function CBM.EventFrame:PLAYER_ENTERING_WORLD()
+  SetupOnce()
+  SetupBars()
+
+  if CBM.OptionsFrame and CBM.OptionsFrame.UpdateOptions then
+    CBM.OptionsFrame:UpdateOptions()
+  end
+
+  CBM.UpdateIDIconMap()
+
+  for _, defaultBar in pairs(defaultBars) do
     CBM.SetIconShownOverrides(defaultBar)
     CBM.EnableDefaultBarClicks(defaultBar)
   end
