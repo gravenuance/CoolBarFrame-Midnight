@@ -26,6 +26,12 @@ All notable changes to CoolBarFrame are documented in this file.
 - Creating a bar during combat no longer calls the restricted
   `SetPropagateMouseClicks`; it is applied when combat ends, like the same
   call on Blizzard's icons.
+- The addon no longer forces the cooldown viewers and Tracked Buffs icons
+  visible from its own `UpdateShownState` hooks; with the Cooldown Manager
+  window open (which edit mode now requires) Blizzard already shows them.
+  Per-icon bookkeeping moved out of Blizzard's frame tables, and the click
+  handler on icons is added with `HookScript` instead of replacing
+  `OnMouseDown`.
 - The addon no longer overwrites Blizzard's global `FindBaseSpellByID`
   (it is unused here and replacing a Blizzard global risks taint).
 
