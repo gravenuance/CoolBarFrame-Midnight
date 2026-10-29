@@ -63,6 +63,16 @@ t.test("MergeBarDefaults raises a zero, negative or NaN scale to the 0.05 minimu
   t.eq(Logic.MergeBarDefaults({ name = "b", scale = 0.05 }).scale, 0.05)
 end)
 
+t.test("ReadOnlyBars completes and detaches a copy, leaving the saved bars untouched", function()
+  local saved = { { name = "a", anchorTarget = "b" }, { name = "b", anchorTarget = "a" }, "junk" }
+  local bars = Logic.ReadOnlyBars(saved)
+  t.eq(saved, { { name = "a", anchorTarget = "b" }, { name = "b", anchorTarget = "a" }, "junk" })
+  t.eq(#bars, 2)
+  t.eq(bars[1].anchorTarget, "UIParent")
+  t.eq(bars[2].anchorTarget, "a")
+  t.eq(bars[2].scale, 1)
+end)
+
 t.test("MergeBarDefaults leaves a complete bar unchanged", function()
   local complete = defaultBar("b")
   complete.scale = 1.5

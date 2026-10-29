@@ -106,6 +106,12 @@ All notable changes to CoolBarFrame are documented in this file.
   Cooldown Manager window stays open, and edit mode resumes after combat
   unless you close the window. Edit mode also stays off when the window
   cannot be opened at all.
+- Saved data from a newer version of the addon, or data whose migration
+  failed, was still rewritten on load (defaults merged in, anchor loops
+  detached), with no backup in that direction; newer data containing an
+  anchor loop raised `SetPoint` errors. Such data is now shown from a
+  completed copy and never written: edit mode and `/cbm new`, `delete` and
+  `reset` are refused with a message.
 
 ## [0.3] - 2026-09-12
 

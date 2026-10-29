@@ -168,6 +168,13 @@ local function NormalizeBars(bars)
   Logic.BreakAnchorCycles(bars)
 end
 
+-- Complete, loop-free bars built from saved data the addon must not write (newer schema, failed migration).
+function Logic.ReadOnlyBars(bars)
+  local copy = type(bars) == "table" and DeepCopy(bars) or {}
+  NormalizeBars(copy)
+  return copy
+end
+
 -- MIGRATIONS[n] upgrades schema n to n + 1.
 Logic.SCHEMA_VERSION = 2
 Logic.MIGRATIONS = {

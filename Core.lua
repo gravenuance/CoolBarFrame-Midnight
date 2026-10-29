@@ -247,6 +247,16 @@ local pendingEditMode = false   -- an enter request waiting for combat/encounter
 local deferredClicks = setmetatable({}, { __mode = "k" }) -- frame -> propagate, postponed past combat
 local hookedFrames = setmetatable({}, { __mode = "k" })   -- Blizzard frames we already hooked
 
+-- Why saved data is shown read-only (newer schema or a failed migration), or nil when it can be edited.
+local readOnlyReason
+
+-- True (after telling the user why) when the saved data must not be changed.
+local function RefuseReadOnly()
+  if not readOnlyReason then return false end
+  CBM.Print(readOnlyReason .. ", so bars can't be edited.")
+  return true
+end
+
 -- No restriction event arrives after a /reload mid-encounter, so the current state is read on load.
 local function ReadRestrictions()
   local getState = C_RestrictedActions and C_RestrictedActions.GetAddOnRestrictionState
@@ -310,6 +320,7 @@ end
 
 -- Returns true when edit mode waits for combat/encounter to end.
 function CBM.SetEditMode(requested)
+  if requested and RefuseReadOnly() then requested = false end
   local active, deferred = CBM.Logic.PlanEditMode(CBM.editModeActive, requested, IsEditModeBlocked())
   if active ~= CBM.editModeActive then
     deferred = ApplyEditMode(active)
@@ -733,7 +744,8 @@ local function SetupBars()
   wipe(iconBarMap)
 
   local lastBar
-  for _, barData in ipairs(CoolBarDB.bars) do
+  local bars = readOnlyReason and CBM.Logic.ReadOnlyBars(CoolBarDB.bars) or CoolBarDB.bars
+  for _, barData in ipairs(bars) do
     lastBar = CBM.CreateNewBar(barData.name, CBM.Logic.MergeBarDefaults(barData))
   end
 
@@ -837,12 +849,12 @@ function CBM.EventFrame:ADDON_LOADED(_, addon)
 
   local status, err = CBM.Logic.MigrateDB(CoolBarDB, CBM.Logic.MIGRATIONS, CBM.Logic.SCHEMA_VERSION)
   if status == "newer" then
-    CBM.Print("your saved data is from a newer version of the addon; leaving it untouched.")
+    readOnlyReason = "your saved data is from a newer version of the addon"
+    CBM.Print(readOnlyReason .. "; bars are shown but it is left untouched.")
   elseif status == "failed" then
-    CBM.Print("failed to migrate saved data (" .. tostring(err) .. "); it was left as it was.")
-  end
-
-  if status ~= "newer" then
+    readOnlyReason = "your saved data could not be migrated"
+    CBM.Print("failed to migrate saved data (" .. tostring(err) .. "); bars are shown but it is left as it was.")
+  else
     local loopsRemoved = CBM.Logic.BreakAnchorCycles(CoolBarDB.bars)
     if loopsRemoved > 0 then
       CBM.Print(loopsRemoved .. " bar anchor loop(s) in saved data were detached from their targets.")
@@ -863,6 +875,8 @@ function CBM.EventFrame:ADDON_LOADED(_, addon)
       else
         CBM.Print("Addons can't close the Cooldown Manager window in combat; press Escape to close it.")
       end
+    elseif (arg == "new" or arg == "delete" or arg == "reset") and RefuseReadOnly() then
+      return
     elseif arg == "new" then
       CBM.NewBar()
     elseif arg == "delete" then

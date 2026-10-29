@@ -103,6 +103,14 @@ function Client.new(options)
     return false
   end
 
+  function Frame:DependsOn(other)
+    if self == other then return true end
+    for _, p in ipairs(self.points) do
+      if p.relativeTo and p.relativeTo:DependsOn(other) then return true end
+    end
+    return false
+  end
+
   function Frame:ClearAllPoints() self.points = {} end
   function Frame:SetPoint(point, relativeTo, relativePoint, x, y)
     if type(relativeTo) == "number" then
@@ -110,6 +118,9 @@ function Client.new(options)
     end
     assert(POINT_FRACTION[point], "SetPoint: bad point " .. tostring(point))
     if type(relativeTo) == "string" then relativeTo = env[relativeTo] end
+    if relativeTo and relativeTo:DependsOn(self) then
+      error("SetPoint: cannot anchor to a region dependent on it", 2)
+    end
     for i = #self.points, 1, -1 do
       if self.points[i].point == point then table.remove(self.points, i) end
     end
