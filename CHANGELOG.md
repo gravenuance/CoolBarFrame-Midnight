@@ -20,6 +20,9 @@ All notable changes to CoolBarFrame are documented in this file.
   (it is unused here and replacing a Blizzard global risks taint).
 
 ### Fixed
+- Dropping a bar after a drag could turn a round offset such as `10` or
+  `-50` into `1` or `-5`: the rounding helper stripped trailing zeros from
+  whole numbers.
 - A saved bar missing fields such as padding, scale or offsets (written by
   an older version) raised errors when the bars were built or laid out;
   every saved bar is now completed from the defaults on load.

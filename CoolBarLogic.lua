@@ -12,6 +12,49 @@ function Logic.ParseNumber(text)
   return tonumber(number)
 end
 
+local function round(number, decimals)
+  if type(number) ~= "number" then
+    return 0
+  end
+  decimals = decimals or 0
+  return tonumber(string.format("%." .. decimals .. "f", number))
+end
+
+function Logic.MinimalRound(number, maxDecimals)
+  if type(number) ~= "number" then
+    return 0
+  end
+  if maxDecimals <= 0 then return round(number) end
+  local r = tostring(round(number, maxDecimals))
+  if r:find(".", 1, true) then -- only a fraction has insignificant trailing zeros; "10" must stay "10"
+    r = r:gsub("0+$", "")
+    r = r:gsub("%.$", "")
+  end
+  return tonumber(r)
+end
+
+function Logic.TrimRound(number, compare)
+  if type(number) ~= "number" then
+    return compare or 0
+  end
+  local r = (type(compare) == "number") and compare or round(number)
+  if math.abs(r - number) < .001 then
+    return r
+  else
+    return number
+  end
+end
+
+function Logic.GetRoundingPrecision(step)
+  if not step then return 0 end
+  local i = 0
+  while step < 1 do
+    step = step * 10
+    i = i + 1
+  end
+  return i
+end
+
 -- True when anchoring barName to targetName would make barName depend on itself.
 -- getAnchorTarget(name) returns the saved anchor target of a bar, or nil for any other frame.
 function Logic.WouldCreateAnchorCycle(barName, targetName, getAnchorTarget)
@@ -58,6 +101,18 @@ function Logic.PlanBarPlacement(settings, targetExists, screenW, screenH, barW, 
       settings.absoluteX - (screenW - barW) / 2,
       settings.absoluteY - (screenH - barH) / 2,
       false
+end
+
+-- Decides what a slider does with a value. mode "refresh" only redisplays the stored value (the
+-- options frame re-reading its bars); mode "input" is the user acting, which is clamped and applied
+-- when it changes the value, or always when `force` (multi-select copies the shown value to every bar).
+-- Returns the value to display and whether to write it to the bars.
+function Logic.PlanSliderUpdate(mode, current, requested, minValue, maxValue, force)
+  if mode == "refresh" or requested == nil then return current, false end
+  local value = requested
+  if minValue and value < minValue then value = minValue end
+  if maxValue and value > maxValue then value = maxValue end
+  return value, force or value ~= current
 end
 
 function Logic.NewBarSettings(name)

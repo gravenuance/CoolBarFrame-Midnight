@@ -78,54 +78,9 @@ function CBM.GetOffsets(_, _, _, xOfs, yOfs)
   return xOfs, yOfs
 end
 
-local function round(number, decimals)
-  if type(number) ~= "number" then
-    return 0
-  end
-  decimals = decimals or 0
-  return tonumber(string.format("%." .. decimals .. "f", number))
-end
-
-function CBM.minimalRound(number, maxDecimals)
-  if type(number) ~= "number" then
-    return 0
-  end
-  if maxDecimals <= 0 then return round(number) end
-  local r = tostring(round(number, maxDecimals))
-  for i = #r, 1, -1 do
-    local char = strsub(r, i, i)
-    if char ~= "0" then
-      r = strsub(r, 1, i)
-      break
-    elseif char == "." then
-      r = strsub(r, 1, i - 1)
-      break
-    end
-  end
-  return tonumber(r)
-end
-
-function CBM.trimRound(number, compare)
-  if type(number) ~= "number" then
-    return compare or 0
-  end
-  local r = (type(compare) == "number") and compare or round(number)
-  if abs(r - number) < .001 then
-    return r
-  else
-    return number
-  end
-end
-
-function CBM.GetRoundingPrecision(step)
-  if not step then return 0 end
-  local i = 0
-  while step < 1 do
-    step = step * 10
-    i = i + 1
-  end
-  return i
-end
+CBM.minimalRound = CBM.Logic.MinimalRound
+CBM.trimRound = CBM.Logic.TrimRound
+CBM.GetRoundingPrecision = CBM.Logic.GetRoundingPrecision
 
 function CBM.GetFrameFromName(name)
   local globalFrame = _G[name]
