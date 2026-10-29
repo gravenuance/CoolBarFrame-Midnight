@@ -5,6 +5,11 @@ All notable changes to CoolBarFrame are documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Saved data is now schema 2. Loading older data merges the full set of bar
+  defaults into every saved bar without overwriting your values, detaches
+  anchor loops, and keeps the pre-migration bars in `CoolBarDB.backup`. A
+  migration that fails restores the bars and no longer stamps the new
+  version.
 - Cooldown viewer layout passes no longer allocate: bar icon lists are
   reused, no closure is created per icon, and the options frame is only
   refreshed while it is visible (it catches up when opened).
@@ -15,6 +20,9 @@ All notable changes to CoolBarFrame are documented in this file.
   (it is unused here and replacing a Blizzard global risks taint).
 
 ### Fixed
+- A saved bar missing fields such as padding, scale or offsets (written by
+  an older version) raised errors when the bars were built or laid out;
+  every saved bar is now completed from the defaults on load.
 - Rebuilding the bars (loading screen, spec or talent change) left the
   icon-to-bar lookup pointing at released bars and queued no layout, so
   icons stayed where they were until Blizzard next laid a viewer out. The

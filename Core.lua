@@ -4,41 +4,6 @@ local addonName, CBM = ...
 -- STATE
 -------------------------------------------------
 
-local SCHEMA_VERSION = 1.00
-
--- Steps to bring CoolBarDB forward from an older schema, keyed by the version they upgrade FROM.
--- Add an entry here whenever SCHEMA_VERSION is bumped; none exist yet since 1.00 is the first schema.
-local migrations = {}
-
-local function MigrateDB(db)
-  if type(db.bars) ~= "table" then
-    db.bars = {}
-  end
-
-  local dbVersion = db.version
-  if type(dbVersion) ~= "number" then
-    dbVersion = SCHEMA_VERSION -- unversioned/corrupt: assume current shape rather than replaying every migration
-  elseif dbVersion > SCHEMA_VERSION then
-    print("|cffffd200CoolBarFrame:|r your saved data is from a newer version of the addon; leaving it untouched.")
-    return -- never stamp/mutate data from a version we don't understand
-  end
-
-  while dbVersion < SCHEMA_VERSION do
-    local migrate = migrations[dbVersion]
-    if not migrate then break end
-
-    local ok, err = pcall(migrate, db)
-    if not ok then
-      print("|cffff0000CoolBarFrame:|r failed to migrate saved data from version " ..
-        dbVersion .. ": " .. tostring(err))
-      break
-    end
-    dbVersion = dbVersion + 1
-  end
-
-  db.version = SCHEMA_VERSION
-end
-
 local iconBarMap = {} -- cooldownID -> bar frame
 local idIconMap = {}  -- cooldownID -> icon frame
 
@@ -71,7 +36,7 @@ local defaultBars = {
 -------------------------------------------------
 
 CoolBarDB = CoolBarDB or {
-  version = SCHEMA_VERSION,
+  version = CBM.Logic.SCHEMA_VERSION,
   bars = {}, -- account-wide bar structures, no per-spec icon lists
 }
 
@@ -692,23 +657,6 @@ CBM.multiDragLeader = nil
 CBM.multiDragDeltaX = 0
 CBM.multiDragDeltaY = 0
 
-local function CreateBarSettings(name)
-  return {
-    name         = name,
-    icons        = {}, -- cooldownIDs, not saved per-spec
-    scale        = 1,
-    padding      = 0,
-    isHorizontal = true,
-    anchorPoint  = "CENTER",
-    anchorTarget = "UIParent",
-    targetPoint  = "CENTER",
-    offsetX      = 0,
-    offsetY      = 0,
-    absoluteX    = 0,
-    absoluteY    = 0,
-  }
-end
-
 function CBM.CreateNewBar(name, settings)
   name = name or ("customBar" .. CBM.BarFramePool:GetFirstAvailableIndex())
 
@@ -718,7 +666,7 @@ function CBM.CreateNewBar(name, settings)
     bar.settings = settings
     bar.settings.name = name
   else
-    bar.settings = CreateBarSettings(name)
+    bar.settings = CBM.Logic.NewBarSettings(name)
     tinsert(CoolBarDB.bars, bar.settings)
   end
 
@@ -805,8 +753,7 @@ local function SetupBars()
 
   local lastBar
   for _, barData in ipairs(CoolBarDB.bars) do
-    barData.icons = barData.icons or {} -- guard against bar entries saved by an older/partial schema
-    lastBar = CBM.CreateNewBar(barData.name, barData)
+    lastBar = CBM.CreateNewBar(barData.name, CBM.Logic.MergeBarDefaults(barData))
   end
 
   -- A bar can be anchored to a later bar, so every bar must exist before any is placed.
@@ -907,11 +854,18 @@ end
 function CBM.EventFrame:ADDON_LOADED(_, addon)
   if addon ~= addonName then return end
 
-  MigrateDB(CoolBarDB)
+  local status, err = CBM.Logic.MigrateDB(CoolBarDB, CBM.Logic.MIGRATIONS, CBM.Logic.SCHEMA_VERSION)
+  if status == "newer" then
+    CBM.Print("your saved data is from a newer version of the addon; leaving it untouched.")
+  elseif status == "failed" then
+    CBM.Print("failed to migrate saved data (" .. tostring(err) .. "); it was left as it was.")
+  end
 
-  local loopsRemoved = CBM.Logic.BreakAnchorCycles(CoolBarDB.bars)
-  if loopsRemoved > 0 then
-    CBM.Print(loopsRemoved .. " bar anchor loop(s) in saved data were detached from their targets.")
+  if status ~= "newer" then
+    local loopsRemoved = CBM.Logic.BreakAnchorCycles(CoolBarDB.bars)
+    if loopsRemoved > 0 then
+      CBM.Print(loopsRemoved .. " bar anchor loop(s) in saved data were detached from their targets.")
+    end
   end
 
   SLASH_CoolBar1 = "/cbm"

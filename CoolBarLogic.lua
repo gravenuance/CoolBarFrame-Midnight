@@ -60,6 +60,88 @@ function Logic.PlanBarPlacement(settings, targetExists, screenW, screenH, barW, 
       false
 end
 
+function Logic.NewBarSettings(name)
+  return {
+    name         = name,
+    icons        = {}, -- cooldownIDs, not saved per-spec
+    scale        = 1,
+    padding      = 0,
+    isHorizontal = true,
+    anchorPoint  = "CENTER",
+    anchorTarget = "UIParent",
+    targetPoint  = "CENTER",
+    offsetX      = 0,
+    offsetY      = 0,
+    absoluteX    = 0,
+    absoluteY    = 0,
+  }
+end
+
+-- Fills fields that are missing or of the wrong type; every valid user value stays.
+function Logic.MergeBarDefaults(settings)
+  for key, default in pairs(Logic.NewBarSettings(settings.name)) do
+    if type(settings[key]) ~= type(default) then
+      settings[key] = default
+    end
+  end
+  return settings
+end
+
+local function DeepCopy(value)
+  if type(value) ~= "table" then return value end
+  local copy = {}
+  for k, v in pairs(value) do copy[k] = DeepCopy(v) end
+  return copy
+end
+
+-- Bars written by older versions may lack fields; schema 2 guarantees complete bars without loops.
+local function NormalizeBars(bars)
+  for index = #bars, 1, -1 do
+    if type(bars[index]) == "table" then
+      Logic.MergeBarDefaults(bars[index])
+    else
+      table.remove(bars, index)
+    end
+  end
+  Logic.BreakAnchorCycles(bars)
+end
+
+-- MIGRATIONS[n] upgrades schema n to n + 1.
+Logic.SCHEMA_VERSION = 2
+Logic.MIGRATIONS = {
+  [1] = function(db) NormalizeBars(db.bars) end,
+}
+
+-- Brings db forward to `current`, keeping the pre-migration bars in db.backup.
+-- Returns "current", "migrated", "newer" (left untouched) or "failed" plus the error; a failed
+-- migration restores the bars and keeps the old version so nothing is stamped as upgraded.
+function Logic.MigrateDB(db, migrations, current)
+  if type(db.bars) ~= "table" then db.bars = {} end
+
+  local version = type(db.version) == "number" and db.version or 1 -- unversioned data predates schema 2
+  if version > current then return "newer" end
+  if version == current then return "current" end
+
+  local backup = { version = version, bars = DeepCopy(db.bars) }
+  for step = version, current - 1 do
+    local migrate = migrations[step]
+    local ok, err
+    if migrate then
+      ok, err = pcall(migrate, db)
+    else
+      ok, err = false, "no migration from schema " .. step
+    end
+    if not ok then
+      db.bars = backup.bars
+      return "failed", err
+    end
+  end
+
+  db.backup = backup
+  db.version = current
+  return "migrated"
+end
+
 -- Detaches (to UIParent) the first bar of every anchor loop in saved bar settings; returns how many.
 function Logic.BreakAnchorCycles(bars)
   local byName = {}
